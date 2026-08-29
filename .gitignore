@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+data/raw/*
+!data/raw/.gitkeep
+data/*.duckdb
+data/*.npy
+.cache/
+llm_cache.sqlite
+.DS_Store
+.ipynb_checkpoints/
