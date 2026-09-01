@@ -1,0 +1,114 @@
+{
+  "n_misses": 18,
+  "false_misses": 0,
+  "details": [
+    {
+      "question": "When will my stationery order arrive in São Paulo?",
+      "gold": "CAT-STATIONERY-001",
+      "false_miss": false,
+      "answered_by": []
+    },
+    {
+      "question": "When will my package arrive in Rondônia if I pay for the faster shipping option?",
+      "gold": "FAQ-0029",
+      "false_miss": false,
+      "answered_by": []
+    },
+    {
+      "question": "When will my order arrive if I live in a remote area in São Paulo?",
+      "gold": "OPS-SP-001",
+      "false_miss": false,
+      "answered_by": []
+    },
+    {
+      "question": "when does my package arrive in São Paulo if i pick the faster shipping?",
+      "gold": "FAQ-0049",
+      "false_miss": false,
+      "answered_by": []
+    },
+    {
+      "question": "How long does it take for a 2 kg package to arrive in Maranhão using standard delivery?",
+      "gold": "POL-RATE-001",
+      "false_miss": false,
+      "answered_by": []
+    },
+    {
+      "question": "When will I get my money back if I return something in São Paulo?",
+      "gold": "POL-FIN-001",
+      "false_miss": false,
+      "answered_by": []
+    },
+    {
+      "question": "When will my garden tools arrive in Bahia?",
+      "gold": "CAT-GARDEN-TOOLS-001",
+      "false_miss": false,
+      "answered_by": []
+    },
+    {
+      "question": "when will my package arrive in Pernambuco if I pay for the faster shipping?",
+      "gold": "FAQ-0009",
+      "false_miss": false,
+      "answered_by": []
+    },
+    {
+      "question": "How much does it cost to send a 2 kg package to Amapá and how many days will it take?",
+      "gold": "POL-RATE-001",
+      "false_miss": false,
+      "answered_by": []
+    },
+    {
+      "question": "when does the store take back perfume if I didn't open it?",
+      "gold": "POL-RET-001",
+      "false_miss": false,
+      "answered_by": []
+    },
+    {
+      "question": "When will my order arrive in Rio Grande do Norte?",
+      "gold": "OPS-RN-001",
+      "false_miss": false,
+      "answered_by": []
+    },
+    {
+      "question": "When should my package arrive in São Paulo if I choose standard shipping?",
+      "gold": "POL-SHIP-001",
+      "false_miss": false,
+      "answered_by": []
+    },
+    {
+      "question": "How much does it cost to ship a 2kg package to Brasília using standard delivery?",
+      "gold": "POL-RATE-001",
+      "false_miss": false,
+      "answered_by": []
+    },
+    {
+      "question": "How much does it cost to ship a 5kg package to Mato Grosso do Sul?",
+      "gold": "POL-RATE-001",
+      "false_miss": false,
+      "answered_by": []
+    },
+    {
+      "question": "when will i get money back if my order from São Paulo takes too long to arrive?",
+      "gold": "POL-SLA-001",
+      "false_miss": false,
+      "answered_by": []
+    },
+    {
+      "question": "When will my package arrive in Espírito Santo if I choose the fastest shipping option?",
+      "gold": "FAQ-0039",
+      "false_miss": false,
+      "answered_by": []
+    },
+    {
+      "question": "When will the seller send my order to the delivery company in Pará?",
+      "gold": "POL-SHIP-001",
+      "false_miss": false,
+      "answered_by": []
+    },
+    {
+      "question": "how long does it take for a small package to arrive in São Paulo with regular mail?",
+      "gold": "POL-RATE-001",
+      "false_miss": false,
+      "answered_by": []
+    }
+  ]
+}
