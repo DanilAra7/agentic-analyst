@@ -1,0 +1,342 @@
+{
+  "easy": {
+    "dense": {
+      "n": 91,
+      "recall_strict": {
+        "1": 0.6483516483516484,
+        "3": 0.8571428571428571,
+        "5": 0.8791208791208791,
+        "10": 0.9230769230769231,
+        "20": 0.967032967032967
+      },
+      "recall_lenient": {
+        "1": 0.7692307692307693,
+        "3": 0.978021978021978,
+        "5": 0.989010989010989,
+        "10": 1.0,
+        "20": 1.0
+      },
+      "mrr": 0.7554854124424264,
+      "by_family": {
+        "CAT": 1.0,
+        "FAQ": 0.975,
+        "OPS": 0.85,
+        "POL": 0.7083333333333334
+      },
+      "family_n": {
+        "CAT": 7,
+        "FAQ": 40,
+        "OPS": 20,
+        "POL": 24
+      }
+    },
+    "rerank_w10": {
+      "n": 91,
+      "recall_strict": {
+        "1": 0.8131868131868132,
+        "3": 0.9120879120879121,
+        "5": 0.9120879120879121,
+        "10": 0.9230769230769231,
+        "20": 0.967032967032967
+      },
+      "recall_lenient": {
+        "1": 0.8791208791208791,
+        "3": 0.989010989010989,
+        "5": 0.989010989010989,
+        "10": 1.0,
+        "20": 1.0
+      },
+      "mrr": 0.8620482940053078,
+      "by_family": {
+        "CAT": 1.0,
+        "FAQ": 0.975,
+        "OPS": 0.9,
+        "POL": 0.7916666666666666
+      },
+      "family_n": {
+        "CAT": 7,
+        "FAQ": 40,
+        "OPS": 20,
+        "POL": 24
+      },
+      "latency": {
+        "p50_ms": 1606.9297500071116,
+        "max_ms": 1672.913750007865,
+        "mean_ms": 1614.3564897538454
+      },
+      "ceiling": 0.9230769230769231
+    },
+    "rerank_w20": {
+      "n": 91,
+      "recall_strict": {
+        "1": 0.8351648351648352,
+        "3": 0.945054945054945,
+        "5": 0.9560439560439561,
+        "10": 0.9560439560439561,
+        "20": 0.967032967032967
+      },
+      "recall_lenient": {
+        "1": 0.8791208791208791,
+        "3": 0.989010989010989,
+        "5": 0.989010989010989,
+        "10": 0.989010989010989,
+        "20": 1.0
+      },
+      "mrr": 0.889051689051689,
+      "by_family": {
+        "CAT": 1.0,
+        "FAQ": 0.975,
+        "OPS": 0.95,
+        "POL": 0.9166666666666666
+      },
+      "family_n": {
+        "CAT": 7,
+        "FAQ": 40,
+        "OPS": 20,
+        "POL": 24
+      },
+      "latency": {
+        "p50_ms": 2812.2940419998486,
+        "max_ms": 2961.3507089961786,
+        "mean_ms": 2841.545567747744
+      },
+      "ceiling": 0.967032967032967
+    },
+    "rerank_w50": {
+      "n": 91,
+      "recall_strict": {
+        "1": 0.8571428571428571,
+        "3": 0.967032967032967,
+        "5": 0.978021978021978,
+        "10": 0.978021978021978,
+        "20": 0.989010989010989
+      },
+      "recall_lenient": {
+        "1": 0.9010989010989011,
+        "3": 0.989010989010989,
+        "5": 0.989010989010989,
+        "10": 0.989010989010989,
+        "20": 1.0
+      },
+      "mrr": 0.9101859678782757,
+      "by_family": {
+        "CAT": 1.0,
+        "FAQ": 0.975,
+        "OPS": 0.95,
+        "POL": 1.0
+      },
+      "family_n": {
+        "CAT": 7,
+        "FAQ": 40,
+        "OPS": 20,
+        "POL": 24
+      },
+      "latency": {
+        "p50_ms": 6327.500917002908,
+        "max_ms": 8034.972708002897,
+        "mean_ms": 6125.351323000359
+      },
+      "ceiling": null
+    },
+    "misses": [
+      {
+        "question": "What is the extended delivery deadline for orders in remote areas of Rio Grande do Norte under the Northeast shipping policy?",
+        "gold_chunk_id": "OPS-RN-001#1",
+        "gold_doc_id": "OPS-RN-001",
+        "family": "OPS",
+        "source_file": "ops-rn.md",
+        "rank": null
+      },
+      {
+        "question": "What are the working days for shipping to or from Piauí (PI) under the marketplace policy?",
+        "gold_chunk_id": "FAQ-0048#0",
+        "gold_doc_id": "FAQ-0048",
+        "family": "FAQ",
+        "source_file": "faq-0048.md",
+        "rank": 13
+      }
+    ]
+  },
+  "hard": {
+    "dense": {
+      "n": 51,
+      "recall_strict": {
+        "1": 0.5098039215686274,
+        "3": 0.7058823529411765,
+        "5": 0.7647058823529411,
+        "10": 0.8431372549019608,
+        "20": 0.9019607843137255
+      },
+      "recall_lenient": {
+        "1": 0.5490196078431373,
+        "3": 0.7843137254901961,
+        "5": 0.8235294117647058,
+        "10": 0.9019607843137255,
+        "20": 0.9803921568627451
+      },
+      "mrr": 0.6247553363007439,
+      "by_family": {
+        "CAT": 1.0,
+        "FAQ": 0.8,
+        "OPS": 0.8333333333333334,
+        "POL": 0.6470588235294118
+      },
+      "family_n": {
+        "CAT": 2,
+        "FAQ": 20,
+        "OPS": 12,
+        "POL": 17
+      }
+    },
+    "rerank_w10": {
+      "n": 51,
+      "recall_strict": {
+        "1": 0.47058823529411764,
+        "3": 0.8235294117647058,
+        "5": 0.8431372549019608,
+        "10": 0.8431372549019608,
+        "20": 0.9019607843137255
+      },
+      "recall_lenient": {
+        "1": 0.5098039215686274,
+        "3": 0.8823529411764706,
+        "5": 0.9019607843137255,
+        "10": 0.9019607843137255,
+        "20": 0.9803921568627451
+      },
+      "mrr": 0.6508446609194803,
+      "by_family": {
+        "CAT": 1.0,
+        "FAQ": 0.9,
+        "OPS": 0.8333333333333334,
+        "POL": 0.7647058823529411
+      },
+      "family_n": {
+        "CAT": 2,
+        "FAQ": 20,
+        "OPS": 12,
+        "POL": 17
+      },
+      "latency": {
+        "p50_ms": 1597.2405419888673,
+        "max_ms": 1608.6759999889182,
+        "mean_ms": 1484.807265618656
+      },
+      "ceiling": 0.8431372549019608
+    },
+    "rerank_w20": {
+      "n": 51,
+      "recall_strict": {
+        "1": 0.47058823529411764,
+        "3": 0.8431372549019608,
+        "5": 0.8823529411764706,
+        "10": 0.9019607843137255,
+        "20": 0.9019607843137255
+      },
+      "recall_lenient": {
+        "1": 0.5098039215686274,
+        "3": 0.9019607843137255,
+        "5": 0.9411764705882353,
+        "10": 0.9803921568627451,
+        "20": 0.9803921568627451
+      },
+      "mrr": 0.6567953107168792,
+      "by_family": {
+        "CAT": 1.0,
+        "FAQ": 1.0,
+        "OPS": 0.8333333333333334,
+        "POL": 0.7647058823529411
+      },
+      "family_n": {
+        "CAT": 2,
+        "FAQ": 20,
+        "OPS": 12,
+        "POL": 17
+      },
+      "latency": {
+        "p50_ms": 2796.792875000392,
+        "max_ms": 2840.797750002821,
+        "mean_ms": 2716.8319478751073
+      },
+      "ceiling": 0.9019607843137255
+    },
+    "rerank_w50": {
+      "n": 51,
+      "recall_strict": {
+        "1": 0.49019607843137253,
+        "3": 0.803921568627451,
+        "5": 0.9019607843137255,
+        "10": 0.9215686274509803,
+        "20": 0.9411764705882353
+      },
+      "recall_lenient": {
+        "1": 0.5294117647058824,
+        "3": 0.8627450980392157,
+        "5": 0.9607843137254902,
+        "10": 1.0,
+        "20": 1.0
+      },
+      "mrr": 0.6583333333333331,
+      "by_family": {
+        "CAT": 1.0,
+        "FAQ": 1.0,
+        "OPS": 0.8333333333333334,
+        "POL": 0.8235294117647058
+      },
+      "family_n": {
+        "CAT": 2,
+        "FAQ": 20,
+        "OPS": 12,
+        "POL": 17
+      },
+      "latency": {
+        "p50_ms": 5057.431374996668,
+        "max_ms": 6226.508834006381,
+        "mean_ms": 5401.91143750053
+      },
+      "ceiling": null
+    },
+    "misses": [
+      {
+        "question": "When will my order arrive if I live in a remote area in São Paulo?",
+        "gold_chunk_id": "OPS-SP-001#1",
+        "gold_doc_id": "OPS-SP-001",
+        "family": "OPS",
+        "source_file": "ops-sp.md",
+        "rank": null
+      },
+      {
+        "question": "How much does it cost to send a 2 kg package to Amapá and how many days will it take?",
+        "gold_chunk_id": "POL-RATE-001#1",
+        "gold_doc_id": "POL-RATE-001",
+        "family": "POL",
+        "source_file": "shipping-rates.md",
+        "rank": 8
+      },
+      {
+        "question": "When will my order arrive in Rio Grande do Norte?",
+        "gold_chunk_id": "OPS-RN-001#1",
+        "gold_doc_id": "OPS-RN-001",
+        "family": "OPS",
+        "source_file": "ops-rn.md",
+        "rank": null
+      },
+      {
+        "question": "How much does it cost to ship a 2kg package to Brasília using standard delivery?",
+        "gold_chunk_id": "POL-RATE-001#4",
+        "gold_doc_id": "POL-RATE-001",
+        "family": "POL",
+        "source_file": "shipping-rates.md",
+        "rank": null
+      },
+      {
+        "question": "how long does it take for a small package to arrive in São Paulo with regular mail?",
+        "gold_chunk_id": "POL-RATE-001#17",
+        "gold_doc_id": "POL-RATE-001",
+        "family": "POL",
+        "source_file": "shipping-rates.md",
+        "rank": 12
+      }
+    ]
+  }
+}

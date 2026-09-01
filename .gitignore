@@ -10,3 +10,4 @@ data/*.npy
 llm_cache.sqlite
 .DS_Store
 .ipynb_checkpoints/
+evals/rerank_scores_*.json
