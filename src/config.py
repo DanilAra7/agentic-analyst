@@ -20,10 +20,10 @@ CACHE_PATH = ROOT / "llm_cache.sqlite"
 
 @dataclass(frozen=True)
 class Settings:
-    llm_provider: str = os.getenv("LLM_PROVIDER", "groq")
-    llm_model: str = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
+    llm_provider: str = os.getenv("LLM_PROVIDER", "mistral")
+    llm_model: str = os.getenv("LLM_MODEL", "mistral-small-latest")
     judge_provider: str = os.getenv("JUDGE_PROVIDER", "mistral")
-    judge_model: str = os.getenv("JUDGE_MODEL", "mistral-small-latest")
+    judge_model: str = os.getenv("JUDGE_MODEL", "mistral-medium-latest")
     embed_model: str = os.getenv("EMBED_MODEL", "BAAI/bge-m3")
     rerank_model: str = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
 
