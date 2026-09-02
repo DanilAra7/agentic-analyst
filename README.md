@@ -47,11 +47,15 @@ Root cause: the cross-encoder rewards topical coherence of the pair. A regional
 handbook is coherent prose about one state; a row of a shipping-rate table is
 not. See decisions 11 and 13.
 
-**2. An aggregate metric hid a regression.**
-Mean recall@5 improved and looked like a clean win. Looking at the distribution
-of rank changes instead showed 10 questions entering the top-3 and 4 leaving it.
-The trade was favourable, but it was a trade, and only visible when measured as
-one.
+**2. An aggregate metric hid a regression, and the regression later flipped sign.**
+Adding the reranker to the plain dense baseline raised mean recall@5 and looked
+like a clean win. The distribution of rank changes said otherwise: 10 questions
+entered the top-3 and 4 left it. Favourable, but a trade.
+Repeating the same measurement *after* chunk enrichment reverses it: 3 in, 7 out.
+Once the underlying retrieval was fixed, the reranker's reordering became net
+harmful at the top of the list. Neither number is visible in a mean, and the
+second one only exists because the first measurement was kept and re-run.
+(The pre-enrichment figures are reproducible with `CHUNK_ENRICH=none make chunks index ablation`.)
 
 **3. Checking a hypothesis before building it saved two days.**
 Contextual retrieval was dropped after a check showed its target failure class
