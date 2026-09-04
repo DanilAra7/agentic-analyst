@@ -1,0 +1,1564 @@
+{
+  "NAMES": {
+    "good": 32,
+    "n": 34,
+    "accuracy": 0.9411764705882353,
+    "outcomes": {
+      "CORRECT": 33,
+      "REFUSED": 1
+    },
+    "by_trap": {
+      "-": {
+        "CORRECT": 12
+      },
+      "A1": {
+        "CORRECT": 3
+      },
+      "A2": {
+        "CORRECT": 2
+      },
+      "A3": {
+        "CORRECT": 1
+      },
+      "B1": {
+        "CORRECT": 3
+      },
+      "B2": {
+        "CORRECT": 1
+      },
+      "B3": {
+        "CORRECT": 1
+      },
+      "C2": {
+        "CORRECT": 3
+      },
+      "C3": {
+        "CORRECT": 2
+      },
+      "D1": {
+        "CORRECT": 1
+      },
+      "F1": {
+        "CORRECT": 1,
+        "REFUSED": 1
+      },
+      "E1": {
+        "CORRECT": 3
+      }
+    },
+    "details": [
+      {
+        "id": "s01",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(DISTINCT order_id) FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s02",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(DISTINCT order_id) FROM order_summary WHERE order_status = 'delivered'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s03",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(DISTINCT category) FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s04",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT sum(price) FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s05",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT SUM(freight_value) / COUNT(order_item_id) FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s06",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT customer_state, COUNT(DISTINCT order_id) AS order_count FROM order_facts GROUP BY customer_state ORDER BY order_count DESC LIMIT 1",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s07",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(DISTINCT order_id) FROM order_summary WHERE extract(year from purchased_at) = 2017",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s08",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT MAX(price) FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s09",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE order_status = 'canceled'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s10",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT category, COUNT(order_item_id) AS items_sold\nFROM order_facts\nWHERE category IS NOT NULL\nGROUP BY category\nORDER BY items_sold DESC\nLIMIT 3",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s11",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT AVG(item_count) FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s12",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(DISTINCT order_id) FROM order_summary WHERE customer_state = 'RJ'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a01",
+        "trap": "A1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(DISTINCT order_id) FROM order_summary WHERE customer_state = 'SP'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a02",
+        "trap": "A2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT avg(items_total) FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a03",
+        "trap": "A2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT avg(price) FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a04",
+        "trap": "A1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(DISTINCT order_id) FROM order_facts WHERE category = 'bed_bath_table'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a05",
+        "trap": "A3",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT avg(review_score) FROM order_summary WHERE order_id IN (SELECT order_id FROM order_facts WHERE category = 'bed_bath_table') AND review_score IS NOT NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a06",
+        "trap": "A1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT SUM(items_total + freight_total) FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b01",
+        "trap": "B1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT avg(date_diff('day', purchased_at, delivered_at)) FROM order_summary WHERE delivered_at IS NOT NULL AND order_status = 'delivered'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b02",
+        "trap": "B1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(DISTINCT order_id) FROM order_summary WHERE delivered_at IS NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b03",
+        "trap": "B2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE order_status = 'delivered' AND delivered_at IS NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b04",
+        "trap": "B3",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT \n  (CAST(SUM(CASE WHEN delivery_delay_days > 0 THEN 1 ELSE 0 END) AS DOUBLE) / COUNT(*)) * 100 \nFROM order_summary \nWHERE delivery_delay_days IS NOT NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b05",
+        "trap": "B1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE review_score IS NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c01",
+        "trap": "C2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(DISTINCT order_id) FROM order_summary WHERE purchased_at >= '2018-10-01' AND purchased_at < '2019-01-01'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c02",
+        "trap": "C2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE date_part('year', purchased_at) = 2019",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c03",
+        "trap": "C3",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(DISTINCT order_id) FROM order_facts WHERE delivery_delay_days < 0",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c04",
+        "trap": "C3",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(DISTINCT order_id) FROM order_facts WHERE delivery_delay_days > 0",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c05",
+        "trap": "C2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(DISTINCT order_id) FROM order_summary WHERE purchased_at >= TIMESTAMP '2018-01-01 00:00:00' AND purchased_at <= TIMESTAMP '2018-06-30 23:59:59'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "d01",
+        "trap": "D1",
+        "outcome": "CORRECT",
+        "good": false,
+        "sql": "SELECT count(DISTINCT customer_id) FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "f01",
+        "trap": "F1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT sum(item_count) FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "f02",
+        "trap": "F1",
+        "outcome": "REFUSED",
+        "good": false,
+        "sql": "CANNOT ANSWER",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": "only SELECT (or WITH ... SELECT) is allowed"
+      },
+      {
+        "id": "e01",
+        "trap": "E1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT category, SUM(price) AS revenue\nFROM order_facts\nWHERE category IS NOT NULL\nGROUP BY category\nORDER BY revenue DESC\nLIMIT 3",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "e02",
+        "trap": "E1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT category, SUM(price + freight_value) AS revenue FROM order_facts GROUP BY category ORDER BY revenue DESC LIMIT 3",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "e03",
+        "trap": "E1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT customer_state, AVG(review_score) AS avg_review_score FROM order_summary WHERE review_score IS NOT NULL GROUP BY customer_state ORDER BY avg_review_score ASC LIMIT 3",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      }
+    ]
+  },
+  "GRAIN": {
+    "good": 31,
+    "n": 34,
+    "accuracy": 0.9117647058823529,
+    "outcomes": {
+      "CORRECT": 32,
+      "WRONG": 1,
+      "REFUSED": 1
+    },
+    "by_trap": {
+      "-": {
+        "CORRECT": 12
+      },
+      "A1": {
+        "CORRECT": 3
+      },
+      "A2": {
+        "CORRECT": 2
+      },
+      "A3": {
+        "CORRECT": 1
+      },
+      "B1": {
+        "WRONG": 1,
+        "CORRECT": 2
+      },
+      "B2": {
+        "CORRECT": 1
+      },
+      "B3": {
+        "CORRECT": 1
+      },
+      "C2": {
+        "CORRECT": 3
+      },
+      "C3": {
+        "CORRECT": 2
+      },
+      "D1": {
+        "CORRECT": 1
+      },
+      "F1": {
+        "CORRECT": 1,
+        "REFUSED": 1
+      },
+      "E1": {
+        "CORRECT": 3
+      }
+    },
+    "details": [
+      {
+        "id": "s01",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s02",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE order_status = 'delivered'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s03",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(DISTINCT category) FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s04",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT SUM(price) FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s05",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT avg(freight_value) FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s06",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT customer_state, COUNT(order_id) AS order_count FROM order_summary GROUP BY customer_state ORDER BY order_count DESC LIMIT 1",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s07",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(order_id) FROM order_summary WHERE extract(year from purchased_at) = 2017",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s08",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT max(price) FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s09",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(order_id) FROM order_summary WHERE order_status = 'canceled'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s10",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT category, COUNT(order_item_id) AS items_sold FROM order_facts WHERE category IS NOT NULL GROUP BY category ORDER BY items_sold DESC LIMIT 3",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s11",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT avg(item_count::double) FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s12",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE customer_state = 'RJ'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a01",
+        "trap": "A1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE customer_state = 'SP'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a02",
+        "trap": "A2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT avg(items_total) FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a03",
+        "trap": "A2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT AVG(price) FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a04",
+        "trap": "A1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(DISTINCT order_id) FROM order_facts WHERE category = 'bed_bath_table'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a05",
+        "trap": "A3",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT avg(s.review_score) FROM order_summary s WHERE s.order_id IN (SELECT f.order_id FROM order_facts f WHERE f.category = 'bed_bath_table')",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a06",
+        "trap": "A1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT SUM(items_total + freight_total) FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b01",
+        "trap": "B1",
+        "outcome": "WRONG",
+        "good": false,
+        "sql": "SELECT avg(delivery_delay_days) FROM order_summary WHERE order_status = 'delivered' AND delivered_at IS NOT NULL AND purchased_at IS NOT NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b02",
+        "trap": "B1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE delivered_at IS NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b03",
+        "trap": "B2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(order_id) FROM order_summary WHERE order_status = 'delivered' AND delivered_at IS NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b04",
+        "trap": "B3",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT \n  (CAST(SUM(CASE WHEN delivery_delay_days > 0 THEN 1 ELSE 0 END) AS DOUBLE) / COUNT(*)) * 100 \nFROM order_summary \nWHERE delivery_delay_days IS NOT NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b05",
+        "trap": "B1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE review_score IS NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c01",
+        "trap": "C2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE purchased_at >= TIMESTAMP '2018-10-01 00:00:00' AND purchased_at < TIMESTAMP '2019-01-01 00:00:00'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c02",
+        "trap": "C2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE date_part('year', purchased_at) = 2019",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c03",
+        "trap": "C3",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE delivery_delay_days < 0",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c04",
+        "trap": "C3",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(order_id) FROM order_summary WHERE delivery_delay_days > 0",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c05",
+        "trap": "C2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE purchased_at >= '2018-01-01 00:00:00' AND purchased_at <= '2018-06-30 23:59:59'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "d01",
+        "trap": "D1",
+        "outcome": "CORRECT",
+        "good": false,
+        "sql": "SELECT COUNT(DISTINCT customer_id) FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "f01",
+        "trap": "F1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT sum(item_count) FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "f02",
+        "trap": "F1",
+        "outcome": "REFUSED",
+        "good": false,
+        "sql": "CANNOT ANSWER",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": "only SELECT (or WITH ... SELECT) is allowed"
+      },
+      {
+        "id": "e01",
+        "trap": "E1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT category, SUM(price) AS revenue FROM order_facts GROUP BY category ORDER BY revenue DESC LIMIT 3",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "e02",
+        "trap": "E1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT category, SUM(price + freight_value) AS revenue FROM order_facts GROUP BY category ORDER BY revenue DESC LIMIT 3",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "e03",
+        "trap": "E1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT customer_state, AVG(review_score) AS avg_review_score FROM order_summary GROUP BY customer_state ORDER BY avg_review_score ASC, customer_state ASC LIMIT 3",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      }
+    ]
+  },
+  "SAMPLES": {
+    "good": 32,
+    "n": 34,
+    "accuracy": 0.9411764705882353,
+    "outcomes": {
+      "CORRECT": 33,
+      "REFUSED": 1
+    },
+    "by_trap": {
+      "-": {
+        "CORRECT": 12
+      },
+      "A1": {
+        "CORRECT": 3
+      },
+      "A2": {
+        "CORRECT": 2
+      },
+      "A3": {
+        "CORRECT": 1
+      },
+      "B1": {
+        "CORRECT": 3
+      },
+      "B2": {
+        "CORRECT": 1
+      },
+      "B3": {
+        "CORRECT": 1
+      },
+      "C2": {
+        "CORRECT": 3
+      },
+      "C3": {
+        "CORRECT": 2
+      },
+      "D1": {
+        "CORRECT": 1
+      },
+      "F1": {
+        "CORRECT": 1,
+        "REFUSED": 1
+      },
+      "E1": {
+        "CORRECT": 3
+      }
+    },
+    "details": [
+      {
+        "id": "s01",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(order_id) FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s02",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE order_status = 'delivered'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s03",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(DISTINCT category) FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s04",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT sum(price) FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s05",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT avg(freight_value) FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s06",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT customer_state, COUNT(order_id) AS order_count FROM order_summary GROUP BY customer_state ORDER BY order_count DESC LIMIT 1",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s07",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE extract(year from purchased_at) = 2017",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s08",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT MAX(price) FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s09",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE order_status = 'canceled'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s10",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT category, count(*) AS items_sold FROM order_facts WHERE category IS NOT NULL GROUP BY category ORDER BY items_sold DESC LIMIT 3",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s11",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT AVG(item_count) FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s12",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE customer_state = 'RJ'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a01",
+        "trap": "A1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(order_id) FROM order_summary WHERE customer_state = 'SP'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a02",
+        "trap": "A2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT avg(items_total) FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a03",
+        "trap": "A2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT AVG(price) FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a04",
+        "trap": "A1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(DISTINCT order_id) FROM order_facts WHERE category = 'bed_bath_table'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a05",
+        "trap": "A3",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT AVG(review_score) \nFROM order_summary \nWHERE order_id IN (\n    SELECT DISTINCT order_id \n    FROM order_facts \n    WHERE category = 'bed_bath_table'\n)",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a06",
+        "trap": "A1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT SUM(items_total + freight_total) FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b01",
+        "trap": "B1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT avg(date_diff('day', purchased_at, delivered_at)) FROM order_summary WHERE order_status = 'delivered' AND delivered_at IS NOT NULL AND purchased_at IS NOT NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b02",
+        "trap": "B1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE delivered_at IS NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b03",
+        "trap": "B2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE order_status = 'delivered' AND delivered_at IS NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b04",
+        "trap": "B3",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT \n    CAST(SUM(CASE WHEN delivery_delay_days > 0 THEN 1 ELSE 0 END) AS DOUBLE) * 100.0 / COUNT(*) \nFROM order_summary \nWHERE delivery_delay_days IS NOT NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b05",
+        "trap": "B1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE review_score IS NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c01",
+        "trap": "C2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE purchased_at >= TIMESTAMP '2018-10-01 00:00:00' AND purchased_at < TIMESTAMP '2019-01-01 00:00:00'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c02",
+        "trap": "C2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE extract(year from purchased_at) = 2019",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c03",
+        "trap": "C3",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE delivered_at < estimated_delivery_at",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c04",
+        "trap": "C3",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE delivery_delay_days > 0",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c05",
+        "trap": "C2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT count(*) FROM order_summary WHERE purchased_at >= '2018-01-01 00:00:00' AND purchased_at <= '2018-06-30 23:59:59'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "d01",
+        "trap": "D1",
+        "outcome": "CORRECT",
+        "good": false,
+        "sql": "SELECT count(DISTINCT customer_id) FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "f01",
+        "trap": "F1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT sum(item_count) FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "f02",
+        "trap": "F1",
+        "outcome": "REFUSED",
+        "good": false,
+        "sql": "CANNOT ANSWER",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": "only SELECT (or WITH ... SELECT) is allowed"
+      },
+      {
+        "id": "e01",
+        "trap": "E1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT category, SUM(price) AS revenue\nFROM order_facts\nGROUP BY category\nORDER BY revenue DESC\nLIMIT 3",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "e02",
+        "trap": "E1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT category, SUM(price + freight_value) AS revenue FROM order_facts GROUP BY category ORDER BY revenue DESC LIMIT 3",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "e03",
+        "trap": "E1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT customer_state, AVG(review_score) AS avg_review_score FROM order_summary WHERE review_score IS NOT NULL AND customer_state IS NOT NULL GROUP BY customer_state ORDER BY avg_review_score ASC, customer_state ASC LIMIT 3",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      }
+    ]
+  },
+  "FEWSHOT": {
+    "good": 32,
+    "n": 34,
+    "accuracy": 0.9411764705882353,
+    "outcomes": {
+      "CORRECT": 33,
+      "WRONG": 1
+    },
+    "by_trap": {
+      "-": {
+        "CORRECT": 12
+      },
+      "A1": {
+        "CORRECT": 3
+      },
+      "A2": {
+        "CORRECT": 2
+      },
+      "A3": {
+        "CORRECT": 1
+      },
+      "B1": {
+        "WRONG": 1,
+        "CORRECT": 2
+      },
+      "B2": {
+        "CORRECT": 1
+      },
+      "B3": {
+        "CORRECT": 1
+      },
+      "C2": {
+        "CORRECT": 3
+      },
+      "C3": {
+        "CORRECT": 2
+      },
+      "D1": {
+        "CORRECT": 1
+      },
+      "F1": {
+        "CORRECT": 2
+      },
+      "E1": {
+        "CORRECT": 3
+      }
+    },
+    "details": [
+      {
+        "id": "s01",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT COUNT(*) AS total_orders FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s02",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT COUNT(*) AS orders FROM order_summary WHERE order_status = 'delivered'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s03",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT COUNT(DISTINCT category) AS distinct_categories FROM order_facts WHERE category IS NOT NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s04",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT SUM(price) AS total_revenue FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s05",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT AVG(freight_value) AS avg_freight FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s06",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT customer_state, COUNT(order_id) AS order_count FROM order_summary GROUP BY customer_state ORDER BY order_count DESC LIMIT 1",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s07",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT COUNT(DISTINCT order_id) AS orders FROM order_facts WHERE EXTRACT(YEAR FROM purchased_at) = 2017",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s08",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT MAX(price) AS max_price FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s09",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT COUNT(*) AS canceled_orders FROM order_summary WHERE order_status = 'canceled'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s10",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT category, COUNT(*) AS item_count FROM order_facts WHERE category IS NOT NULL GROUP BY category ORDER BY item_count DESC LIMIT 3",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s11",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT AVG(item_count::double) AS avg_item_count FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "s12",
+        "trap": "-",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT COUNT(*) AS orders FROM order_summary WHERE customer_state = 'RJ'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a01",
+        "trap": "A1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT COUNT(*) AS orders FROM order_summary WHERE customer_state = 'SP'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a02",
+        "trap": "A2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT AVG(items_total) AS avg_items_total FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a03",
+        "trap": "A2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT AVG(price) AS avg_price FROM order_facts",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a04",
+        "trap": "A1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT COUNT(DISTINCT order_id) AS orders FROM order_facts WHERE category = 'bed_bath_table'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a05",
+        "trap": "A3",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT AVG(s.review_score) AS avg_review_score\nFROM order_summary s\nJOIN (\n    SELECT DISTINCT order_id \n    FROM order_facts \n    WHERE category = 'bed_bath_table'\n) f ON s.order_id = f.order_id\nWHERE s.review_score IS NOT NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "a06",
+        "trap": "A1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT SUM(items_total + freight_total) AS total_revenue FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b01",
+        "trap": "B1",
+        "outcome": "WRONG",
+        "good": false,
+        "sql": "SELECT AVG(EXTRACT(EPOCH FROM (delivered_at - purchased_at)) / 86400.0) AS avg_delivery_days FROM order_summary WHERE order_status = 'delivered' AND delivered_at IS NOT NULL AND purchased_at IS NOT NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b02",
+        "trap": "B1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT COUNT(*) AS orders FROM order_summary WHERE delivered_at IS NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b03",
+        "trap": "B2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT COUNT(*) AS orders FROM order_summary WHERE order_status = 'delivered' AND delivered_at IS NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b04",
+        "trap": "B3",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT (COUNT(CASE WHEN delivery_delay_days > 0 THEN 1 END) * 100.0) / COUNT(*) AS late_percentage FROM order_summary WHERE delivery_delay_days IS NOT NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "b05",
+        "trap": "B1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT COUNT(*) AS orders FROM order_summary WHERE review_score IS NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c01",
+        "trap": "C2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT COUNT(order_id) FROM order_summary WHERE purchased_at >= TIMESTAMP '2018-10-01 00:00:00' AND purchased_at < TIMESTAMP '2019-01-01 00:00:00'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c02",
+        "trap": "C2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT COUNT(*) AS order_count FROM order_summary WHERE EXTRACT(YEAR FROM purchased_at) = 2019",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c03",
+        "trap": "C3",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT COUNT(*) AS early_orders FROM order_summary WHERE delivered_at IS NOT NULL AND estimated_delivery_at IS NOT NULL AND delivered_at < estimated_delivery_at",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c04",
+        "trap": "C3",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT COUNT(*) AS orders_delayed FROM order_summary WHERE delivery_delay_days > 0 AND delivered_at IS NOT NULL",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "c05",
+        "trap": "C2",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT COUNT(order_id) AS order_count FROM order_summary WHERE purchased_at >= TIMESTAMP '2018-01-01 00:00:00' AND purchased_at <= TIMESTAMP '2018-06-30 23:59:59'",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "d01",
+        "trap": "D1",
+        "outcome": "CORRECT",
+        "good": false,
+        "sql": "SELECT COUNT(DISTINCT customer_id) AS unique_customers FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "f01",
+        "trap": "F1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT SUM(item_count) AS total_items FROM order_summary",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "f02",
+        "trap": "F1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT COUNT(*) AS orders_with_no_items FROM order_summary WHERE item_count = 0",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "e01",
+        "trap": "E1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT category, SUM(price) AS revenue FROM order_facts WHERE category IS NOT NULL GROUP BY category ORDER BY revenue DESC LIMIT 3",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "e02",
+        "trap": "E1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT category, SUM(price + freight_value) AS revenue FROM order_facts WHERE category IS NOT NULL GROUP BY category ORDER BY revenue DESC LIMIT 3",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      },
+      {
+        "id": "e03",
+        "trap": "E1",
+        "outcome": "CORRECT",
+        "good": true,
+        "sql": "SELECT customer_state, AVG(review_score) AS avg_score FROM order_summary WHERE review_score IS NOT NULL GROUP BY customer_state ORDER BY avg_score ASC LIMIT 3",
+        "llm_s": 0.0,
+        "cached": true,
+        "error": null
+      }
+    ]
+  }
+}

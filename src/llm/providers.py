@@ -34,7 +34,7 @@ _CACHE = LLMCache(CACHE_PATH)
 
 
 class OpenAICompatProvider:
-    def __init__(self, provider: str, model: str, timeout: float = 120.0):
+    def __init__(self, provider: str, model: str, timeout: float = 45.0):
         if provider not in ENDPOINTS:
             raise ValueError(f"Неизвестный провайдер {provider!r}. Доступны: {list(ENDPOINTS)}")
         base_url, env_key = ENDPOINTS[provider]
@@ -88,12 +88,16 @@ class OpenAICompatProvider:
                 resp = self._client.post(path, json=body)
                 if resp.status_code in RETRY_STATUS:
                     wait = self._retry_after(resp) or (2**attempt + random.random())
+                    print(f"    [{self.name}] {resp.status_code}, попытка "
+                          f"{attempt+1}/{max_attempts}, пауза {min(wait,60):.0f}s", flush=True)
                     time.sleep(min(wait, 60))
                     continue
                 resp.raise_for_status()
                 return resp.json()
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last_error = exc
+                print(f"    [{self.name}] {type(exc).__name__}, попытка "
+                      f"{attempt+1}/{max_attempts}", flush=True)
                 time.sleep(min(2**attempt + random.random(), 60))
         raise RuntimeError(
             f"{self.name}: не удалось выполнить запрос за {max_attempts} попыток"

@@ -22,6 +22,7 @@
 """
 from __future__ import annotations
 
+import json
 import re
 import threading
 from dataclasses import dataclass
@@ -88,6 +89,35 @@ def _con() -> duckdb.DuckDBPyConnection:
     return duckdb.connect(str(DB_PATH), read_only=True)
 
 
+def _tables_used(sql: str) -> set[str]:
+    """Имена таблиц из РАЗОБРАННОГО запроса, а не регуляркой по тексту.
+
+    Регулярка вида "from + слово" ломается на EXTRACT(year FROM purchased_at):
+    она считает `purchased_at` таблицей и отвергает совершенно верный запрос.
+    Этот дефект отбраковал правильный ответ модели в первом же прогоне, то есть
+    портил не работу инструмента, а ИЗМЕРЕНИЕ. Разбираем через собственный
+    парсер DuckDB; регулярка остаётся запасным вариантом.
+    """
+    try:
+        raw = _con().execute("SELECT json_serialize_sql(?)", [sql]).fetchone()[0]
+        out: set[str] = set()
+
+        def walk(node):
+            if isinstance(node, dict):
+                if node.get("type") == "BASE_TABLE" and node.get("table_name"):
+                    out.add(str(node["table_name"]).lower())
+                for v in node.values():
+                    walk(v)
+            elif isinstance(node, list):
+                for v in node:
+                    walk(v)
+
+        walk(json.loads(raw))
+        return out
+    except Exception:                       # noqa: BLE001 - парсер не должен ронять инструмент
+        return {t.lower() for t in FROM_JOIN.findall(sql)}
+
+
 def validate(sql: str) -> str | None:
     """Причина отказа или None. Проверяем ДО выполнения, ради внятного ответа."""
     s = re.sub(r"--[^\n]*|/\*.*?\*/", " ", sql, flags=re.S).strip().rstrip(";")
@@ -99,8 +129,8 @@ def validate(sql: str) -> str | None:
         return "only SELECT (or WITH ... SELECT) is allowed"
     if m := FORBIDDEN.search(s):
         return f"statement type '{m.group(1).upper()}' is not allowed, this tool is read-only"
+    used = _tables_used(s)
     allowed = set(VIEWS) | {n.lower() for n in CTE_NAMES.findall(s)}
-    used = {t.lower() for t in FROM_JOIN.findall(s)}
     if unknown := used - allowed:
         return (f"unknown or forbidden table(s): {', '.join(sorted(unknown))}. "
                 f"Only these are available: {', '.join(VIEWS)}")
