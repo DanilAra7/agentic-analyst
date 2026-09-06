@@ -83,11 +83,11 @@ def report(res: dict) -> None:
 
 
 def main() -> None:
-    from src.agent import router
+    from src.agent import loop, router
     from src.llm.providers import OpenAICompatProvider
 
     which = sys.argv[1] if len(sys.argv) > 1 else "router"
-    fn = {"router": router.answer}
+    fn = {"router": router.answer, "agent": loop.answer}
     if which not in fn:
         raise SystemExit(f"неизвестная схема {which!r}, доступны: {list(fn)}")
 

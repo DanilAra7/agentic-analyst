@@ -98,21 +98,36 @@ def run_step(llm, messages: list[dict], tools=TOOL_SPECS, tr: Trace | None = Non
 
 
 def assistant_msg(r) -> dict:
+    """Ответ модели обратно в историю диалога.
+
+    Служебные поля провайдера (`c.extra`) пробрасываются как есть: Gemini 3
+    кладёт туда `thought_signature` и без него отвечает 400 на следующий раунд.
+    Роутер этого не замечал - у него следующего раунда нет.
+    """
     m: dict = {"role": "assistant", "content": r.text or ""}
     if r.tool_calls:
         m["tool_calls"] = [{"id": c.id, "type": "function",
                             "function": {"name": c.name,
-                                         "arguments": json.dumps(c.arguments, ensure_ascii=False)}}
+                                         "arguments": json.dumps(c.arguments, ensure_ascii=False)},
+                            **(c.extra or {})}
                            for c in r.tool_calls]
     return m
 
 
 # ---------------------------------------------------------------- подсчёт
 
+# Определение отказа регуляркой - слабое место замера, и вот почему оно уже
+# сработало против нас: агент ответил «The sources DO not contain data ... for
+# Portugal», то есть отказался верно, а шаблон ждал «does not contain» и записал
+# это в провалы. Четвёртый случай в проекте, когда врал измеритель, а не система.
+# Шаблон расширен, но остаётся эвристикой: настоящее решение - структурированный
+# вывод, где отказ является отдельным полем, а не догадкой по тексту. Бэклог №36.
 REFUSAL = re.compile(
-    r"\b(cannot|can'?t|not available|unavailable|no data|not present|"
-    r"does not (?:contain|exist)|isn'?t (?:available|present)|"
-    r"unable to|not possible|no such|not stored|not recorded)\b", re.I)
+    r"\b(?:cannot|can'?t|unable to|not possible|no such|"
+    r"not available|unavailable|no data|not present|not stored|not recorded|"
+    r"(?:do|does|did|is|are|was|were)(?:\s+not|n'?t)\s+"
+    r"(?:contain|have|include|exist|cover|record|store|track|list|provide|available|present)|"
+    r"isn'?t (?:available|present)|there is no|there are no)\b", re.I)
 
 NUM = re.compile(r"-?\d[\d\s,]*\.?\d*")
 

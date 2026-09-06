@@ -126,7 +126,10 @@ class OpenAICompatProvider:
                 # Модель вернула невалидный JSON. Это штатная ситуация,
                 # обрабатывается на уровне агента, а не падением здесь.
                 args = {"__malformed__": raw_args}
-            calls.append(ToolCall(id=tc.get("id", ""), name=fn.get("name", ""), arguments=args))
+            calls.append(ToolCall(id=tc.get("id", ""), name=fn.get("name", ""),
+                                  arguments=args,
+                                  extra={k: v for k, v in tc.items()
+                                         if k not in ("id", "type", "function")}))
 
         return LLMResponse(
             text=msg.get("content") or "",
