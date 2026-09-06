@@ -1,0 +1,415 @@
+{
+  "scheme": "router",
+  "rows": [
+    {
+      "id": "sq1",
+      "kind": "sql",
+      "question": "How many orders have the status 'delivered'?",
+      "answer": "96478 orders have the status 'delivered'.\n\nSource: sql_query (order_summary)",
+      "correct": true,
+      "tools_ok": true,
+      "tools_used": [
+        "sql_query"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 0.8383740205317736,
+      "tokens": 1426,
+      "refused": false,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "sq2",
+      "kind": "sql",
+      "question": "Which customer state has the most orders?",
+      "answer": "The customer state with the most orders is São Paulo (SP) with 41,746 orders.\n\nSource: order_summary",
+      "correct": true,
+      "tools_ok": true,
+      "tools_used": [
+        "sql_query"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 0.46400001156143844,
+      "tokens": 1488,
+      "refused": false,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "sq3",
+      "kind": "sql",
+      "question": "What is the average review score across all orders?",
+      "answer": "The average review score across all orders is approximately 4.09 (specifically 4.0868).\n\nSource id: order_summary",
+      "correct": true,
+      "tools_ok": true,
+      "tools_used": [
+        "sql_query"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 0.5076260131318122,
+      "tokens": 1421,
+      "refused": false,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "sq4",
+      "kind": "sql",
+      "question": "Which product category has the most items sold?",
+      "answer": "The product category with the most items sold is \"bed_bath_table\" with 11,115 items.\n\nSource: sql_query (order_facts view)",
+      "correct": true,
+      "tools_ok": true,
+      "tools_used": [
+        "sql_query"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 0.6420840218197554,
+      "tokens": 1459,
+      "refused": false,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "sq5",
+      "kind": "sql",
+      "question": "How many orders arrived later than the estimated delivery date?",
+      "answer": "6,535 orders arrived later than the estimated delivery date.\n\nSource: `order_summary`",
+      "correct": true,
+      "tools_ok": true,
+      "tools_used": [
+        "sql_query"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 0.48645801143720746,
+      "tokens": 1436,
+      "refused": false,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "sq6",
+      "kind": "sql",
+      "question": "What is the total revenue including freight?",
+      "answer": "The total revenue including freight is 15,843,553.24.\n\nSource id: order_summary",
+      "correct": true,
+      "tools_ok": true,
+      "tools_used": [
+        "sql_query"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 0.3097090229857713,
+      "tokens": 1432,
+      "refused": false,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "dq1",
+      "kind": "docs",
+      "question": "What is the voluntary return window under the current returns policy?",
+      "answer": "Under the current returns policy (POL-RET-002), the total voluntary return window is 14 calendar days from the delivery date recorded by the carrier.\n\nSources: [1], [3], [4], [5]",
+      "correct": true,
+      "tools_ok": true,
+      "tools_used": [
+        "search_docs"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 987.6971249759663,
+      "tokens": 2882,
+      "refused": false,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "dq2",
+      "kind": "docs",
+      "question": "What is the return window for the telephony category?",
+      "answer": "The return window for the `telephony` category is 30 days.\n\nSources: POL-CAT-001",
+      "correct": true,
+      "tools_ok": true,
+      "tools_used": [
+        "search_docs"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 726.6848329745699,
+      "tokens": 2662,
+      "refused": false,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "dq3",
+      "kind": "docs",
+      "question": "Which categories require prior authorisation for a return?",
+      "answer": "Based on the documentation, the categories that require prior authorisation for a return are `auto`, `electronics`, `musical_instruments` (specifically those above BRL 2,000, as stated in POL-RET-002 section 5), and any other categories listed with \"Yes\" under the Prior authorisation column in POL-CAT-001.\n\nSources: POL-CAT-001, POL-RET-002",
+      "correct": true,
+      "tools_ok": true,
+      "tools_used": [
+        "search_docs"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 883.9587089896668,
+      "tokens": 2573,
+      "refused": false,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "dq4",
+      "kind": "docs",
+      "question": "A delivery is 5 days beyond the committed deadline. What compensation is due?",
+      "answer": "For a delivery delayed by 5 days beyond the committed deadline, the compensation due is a full refund of the freight plus 10% of the item price.\n\nSource: POL-SLA-001",
+      "correct": true,
+      "tools_ok": true,
+      "tools_used": [
+        "search_docs"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 767.0552080089692,
+      "tokens": 2568,
+      "refused": false,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "dq5",
+      "kind": "docs",
+      "question": "Does the current policy charge a restocking fee on defect-related returns?",
+      "answer": "No, the restocking fee has been abolished for all defect-related returns.\n\nSources: POL-RET-002",
+      "correct": true,
+      "tools_ok": true,
+      "tools_used": [
+        "search_docs"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 827.6597920048516,
+      "tokens": 3075,
+      "refused": false,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "dq6",
+      "kind": "docs",
+      "question": "Is Saturday counted as a business day for parcels handled through the Roraima hub?",
+      "answer": "No, Saturday is not counted as a business day for parcels handled through the Roraima hub (Boa Vista hub).\n\nSource: OPS-RR-001 (Section 2)",
+      "correct": true,
+      "tools_ok": true,
+      "tools_used": [
+        "search_docs"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 868.20683197584,
+      "tokens": 3374,
+      "refused": false,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "bq1",
+      "kind": "both",
+      "question": "Under the delivery delay compensation policy, how many orders qualify for the highest compensation tier?",
+      "answer": "Based on the policy document POL-SLA-001, the highest compensation tier is \"15 or more\" days beyond the deadline. However, the available sources do not provide the order data or database query results to determine how many orders qualify for this tier. \n\nTo answer the question, we would need to query the database (`order_summary` or `order_facts`) to count the number of delivered orders where `delivery_delay_days` is greater than or equal to 15.\n\nSources: POL-SLA-001",
+      "correct": false,
+      "tools_ok": false,
+      "tools_used": [
+        "search_docs"
+      ],
+      "steps": 1,
+      "llm_calls": 3,
+      "ms": 1602.9499169962946,
+      "tokens": 4469,
+      "refused": false,
+      "stop_reason": "needed_second_hop"
+    },
+    {
+      "id": "bq2",
+      "kind": "both",
+      "question": "How much freight would we refund in total for orders that fall into the lowest delay compensation tier?",
+      "answer": "Based on policy [POL-SLA-001], the lowest delay compensation tier is \"1–3\" days beyond the deadline, for which freight is refunded in full. \n\nHowever, we cannot compute the total freight to refund because the `order_summary` and `order_facts` databases do not contain the filter or column to isolate delivery delays specifically caused by the carrier (excluding suspensions for extreme weather, strikes, or refusal of receipt as required by section 3 of POL-SLA-001). \n\nSources: POL-SLA-001, order_summary, order_facts",
+      "correct": false,
+      "tools_ok": false,
+      "tools_used": [
+        "search_docs"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 1222.690208000131,
+      "tokens": 2662,
+      "refused": true,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "bq3",
+      "kind": "both",
+      "question": "Among the three categories with the highest revenue, which one has the shortest return window?",
+      "answer": "The top three categories by revenue are `health_beauty`, `watches_gifts`, and `bed_bath_table`. However, the return windows for these categories cannot be answered because the return window policies and rules are missing from the available sources (`search_docs` was not queried, and database records do not contain business rules such as return windows).\n\nSources: `sql_query`",
+      "correct": false,
+      "tools_ok": false,
+      "tools_used": [
+        "sql_query"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 0.7497089973185211,
+      "tokens": 1569,
+      "refused": true,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "bq4",
+      "kind": "both",
+      "question": "For the state with the most orders, what is the designated sorting hub?",
+      "answer": "The state with the most orders is São Paulo (SP) with 41,746 orders. However, the designated sorting hub for SP cannot be answered because that information is a business rule or logistical detail that lives in the written policies and handbooks (search_docs), which are missing.\n\nSource IDs:\n- sql_query (for identifying state SP with 41,746 orders)\n- search_docs (missing for sorting hub locations)",
+      "correct": false,
+      "tools_ok": false,
+      "tools_used": [
+        "sql_query"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 0.36199999158270657,
+      "tokens": 1536,
+      "refused": true,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "bq5",
+      "kind": "both",
+      "question": "How many distinct orders contain items from categories that require prior authorisation for returns?",
+      "answer": "To answer the question, we need:\n1. The list of categories that require prior authorisation for returns from document POL-CAT-001 (`electronics`, `musical_instruments`, `auto`, plus any others that might be listed in the truncated part of the document).\n2. The count of distinct orders containing items from those categories from the database (`order_facts`).\n\nBecause the table in POL-CAT-001 is truncated at the end (`office`), we do not have the complete list of categories requiring prior authorisation, and therefore cannot query the database accurately.\n\nSources: POL-CAT-001",
+      "correct": false,
+      "tools_ok": false,
+      "tools_used": [
+        "search_docs"
+      ],
+      "steps": 1,
+      "llm_calls": 3,
+      "ms": 1695.6094170163851,
+      "tokens": 4490,
+      "refused": true,
+      "stop_reason": "needed_second_hop"
+    },
+    {
+      "id": "bq6",
+      "kind": "both",
+      "question": "The state with the worst average review score: is Saturday counted as a business day for its hub?",
+      "answer": "The state with the worst average review score is RR (Roraima). However, the sources do not contain any information about whether Saturday is counted as a business day for its hub (or any regional hub operating procedures or working day rules).\n\nSources: sql_query (order_summary); search_docs (not available/missing)",
+      "correct": false,
+      "tools_ok": false,
+      "tools_used": [
+        "sql_query"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 0.7809579838067293,
+      "tokens": 1632,
+      "refused": true,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "bq7",
+      "kind": "both",
+      "question": "Among the five categories with the most items sold, which has the shortest return window?",
+      "answer": "The five categories with the most items sold are `bed_bath_table`, `health_beauty`, `sports_leisure`, `furniture_decor`, and `computers_accessories`. \n\nHowever, the sources are not enough to determine which of these has the shortest return window: the database (`order_facts`) provides item counts and categories, but return windows are business rules that live in the written policies and handbooks, which were not provided.\n\nSources: sql_query (`order_facts`); search_docs (missing)",
+      "correct": false,
+      "tools_ok": false,
+      "tools_used": [
+        "sql_query"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 0.4169169988017529,
+      "tokens": 1587,
+      "refused": false,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "bq8",
+      "kind": "both",
+      "question": "Which of the top five categories by items sold has a hygiene seal requirement on returns?",
+      "answer": "The sources do not provide enough information to determine which of the top five categories by items sold has a hygiene seal requirement on returns. \n\nWhile the top five categories are identified from the database (`bed_bath_table`, `health_beauty`, `sports_leisure`, `furniture_decor`, `computers_accessories`), the policy document on category-specific return restrictions (`POL-CAT-001`) mentions only a few categories (`electronics`, `stationery`, `musical_instruments`, `office_furniture`) and does not include the top five categories. \n\nSources: `order_facts`, `POL-CAT-001`",
+      "correct": true,
+      "tools_ok": true,
+      "tools_used": [
+        "sql_query",
+        "search_docs"
+      ],
+      "steps": 2,
+      "llm_calls": 2,
+      "ms": 1038.6130409897305,
+      "tokens": 2637,
+      "refused": false,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "nq1",
+      "kind": "none",
+      "question": "How many unique customers placed at least one order?",
+      "answer": "99,441 unique customers placed at least one order.\n\nSources: order_summary",
+      "correct": false,
+      "tools_ok": false,
+      "tools_used": [
+        "sql_query"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 0.8309590048156679,
+      "tokens": 1418,
+      "refused": false,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "nq2",
+      "kind": "none",
+      "question": "How many orders were paid by credit card?",
+      "answer": "The provided sources (the `order_facts` table, the `order_summary` table, and the policy/FAQ documents) do not contain information about the payment methods used for orders. Therefore, the number of orders paid by credit card cannot be determined from the available sources.",
+      "correct": true,
+      "tools_ok": false,
+      "tools_used": [
+        "search_docs",
+        "sql_query"
+      ],
+      "steps": 2,
+      "llm_calls": 2,
+      "ms": 810.7912499690428,
+      "tokens": 2860,
+      "refused": true,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "nq3",
+      "kind": "none",
+      "question": "What is the average delivery time to Portugal?",
+      "answer": "The sources cannot answer this question because the Brazilian e-commerce marketplace database only contains orders delivered within Brazil (customer states are Brazilian states, such as SP, RJ, MG, etc.), and there is no record of shipments or delivery times to Portugal. \n\nSource ids: order_summary, order_facts",
+      "correct": true,
+      "tools_ok": false,
+      "tools_used": [
+        "sql_query"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 0.9059589938260615,
+      "tokens": 1509,
+      "refused": true,
+      "stop_reason": "answered_after_one_hop"
+    },
+    {
+      "id": "nq4",
+      "kind": "none",
+      "question": "What is the contact email of the seller with the highest revenue?",
+      "answer": "The sources are not enough to answer the question. While the order database (`order_facts`) identifies the seller with the highest revenue (seller ID `4869f7a5dfa277a7dca6462dcf3b52b2`), neither the database nor the search documents contain seller contact emails. \n\nSource ids: sql_query (for the seller ID), search_docs (missing seller contact information).",
+      "correct": false,
+      "tools_ok": false,
+      "tools_used": [
+        "sql_query"
+      ],
+      "steps": 1,
+      "llm_calls": 2,
+      "ms": 0.6143340142443776,
+      "tokens": 1566,
+      "refused": false,
+      "stop_reason": "answered_after_one_hop"
+    }
+  ]
+}

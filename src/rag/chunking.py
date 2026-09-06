@@ -48,18 +48,37 @@ class Chunk:
 
 def parse_frontmatter(raw: str) -> tuple[dict[str, str], str]:
     """Минимальный разбор YAML-шапки. Полный YAML тут не нужен: шапки мы
-    генерируем сами и знаем, что там только `ключ: значение`."""
-    if not raw.startswith("---"):
+    генерируем сами и знаем, что там только `ключ: значение`.
+
+    Разбор построчный, а не по `raw.startswith("---")`. Причина конкретная:
+    один документ из 373 (`category-restrictions.md`) вышел из генератора с
+    отступом в 4 пробела. Проверка на начало строки его не узнавала, шапка
+    не разбиралась, документ уходил в индекс БЕЗ названия, а сам текст шапки
+    попадал внутрь чанка.
+    Дефект прожил весь M1 и M2 незамеченным, потому что метрики поиска
+    смотрят только на chunk_id: нужный кусок находился, а то, что из него
+    невозможно извлечь ответ, метрика recall не видит в принципе.
+    Заодно снимаем общий отступ с тела: в markdown 4 пробела превращают
+    таблицу в блок кода.
+    """
+    lines = raw.splitlines()
+    i = 0
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+    if i >= len(lines) or lines[i].strip() != "---":
         return {}, raw
-    end = raw.find("\n---", 3)
-    if end == -1:
-        return {}, raw
-    meta = {}
-    for line in raw[3:end].strip().splitlines():
-        if ":" in line:
-            k, _, v = line.partition(":")
+
+    meta: dict[str, str] = {}
+    j = i + 1
+    while j < len(lines) and lines[j].strip() != "---":
+        if ":" in lines[j]:
+            k, _, v = lines[j].partition(":")
             meta[k.strip()] = v.strip()
-    return meta, raw[end + 4 :].lstrip("\n")
+        j += 1
+    body_lines = lines[j + 1:]
+
+    body = [ln[4:] if ln.startswith("    ") else ln for ln in body_lines]
+    return meta, "\n".join(body).lstrip("\n")
 
 
 def split_tokens(n_tokens: int, size: int, overlap: int) -> list[tuple[int, int]]:

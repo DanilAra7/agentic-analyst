@@ -1,0 +1,160 @@
+"""Общее для роутера и агента: реестр инструментов, трасса, подсчёт ответа.
+
+Вынесено отдельно, чтобы роутер и агент отличались РОВНО одним - числом
+разрешённых заходов в инструменты. Если бы у них были разные промпты, разные
+инструменты или разный разбор ответа, сравнение мерило бы эту разницу, а не
+агентность.
+"""
+from __future__ import annotations
+
+import json
+import re
+import time
+from dataclasses import dataclass, field
+
+from src.tools.search import TOOL_SPEC as SEARCH_SPEC
+from src.tools.search import get_search_tool
+from src.tools.sql import TOOL_SPEC as SQL_SPEC
+from src.tools.sql import SchemaLevel, describe, run
+
+TOOL_SPECS = [SQL_SPEC, SEARCH_SPEC]
+
+SYSTEM = """You are an analyst for a Brazilian e-commerce marketplace.
+
+You have two sources and they hold different things:
+- sql_query: the order database. Counts, sums, averages, rankings, dates, states,
+  categories, prices, review scores, delivery delays.
+- search_docs: the written policies and handbooks. Rules, windows, thresholds,
+  compensation tiers, regional procedures, service codes.
+
+A number that exists only as a business rule (a return window, a compensation
+threshold, a list of restricted categories) lives in the documents, not the
+database. A count or an aggregate lives in the database, not the documents.
+
+{schema}
+
+Rules:
+- Answer from the sources, never from your own knowledge of Brazil or e-commerce.
+- If the sources cannot answer, say so plainly and explain what is missing.
+  Do not substitute a plausible-looking number.
+- Keep the final answer short: the direct answer first, then the source ids."""
+
+
+@dataclass
+class Step:
+    tool: str
+    arguments: dict
+    result: str
+    ok: bool
+    ms: float
+
+
+@dataclass
+class Trace:
+    question: str
+    answer: str = ""
+    steps: list[Step] = field(default_factory=list)
+    llm_calls: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    ms: float = 0.0
+    stop_reason: str = ""
+
+    @property
+    def tools_used(self) -> list[str]:
+        return [s.tool for s in self.steps]
+
+
+def execute(name: str, args: dict) -> tuple[str, bool]:
+    """Выполнить инструмент. Ошибка возвращается ТЕКСТОМ: агент должен иметь
+    шанс её прочитать и исправиться, исключение убило бы цикл."""
+    if "__malformed__" in args:
+        return (f"TOOL ERROR: arguments were not valid JSON: "
+                f"{args['__malformed__'][:200]}"), False
+    try:
+        if name == "sql_query":
+            r = run(args.get("sql", ""))
+            return r.as_text(), r.ok
+        if name == "search_docs":
+            return get_search_tool().as_text(args.get("query", "")), True
+        return f"TOOL ERROR: no tool named {name!r}. Available: sql_query, search_docs", False
+    except Exception as e:                     # noqa: BLE001
+        return f"TOOL ERROR: {type(e).__name__}: {e}", False
+
+
+def system_prompt() -> str:
+    return SYSTEM.format(schema=describe(SchemaLevel.GRAIN))
+
+
+def run_step(llm, messages: list[dict], tools=TOOL_SPECS, tr: Trace | None = None):
+    t0 = time.perf_counter()
+    r = llm.complete(messages, tools=tools, temperature=0.0, max_tokens=900)
+    if tr is not None:
+        tr.llm_calls += 1
+        tr.prompt_tokens += r.prompt_tokens
+        tr.completion_tokens += r.completion_tokens
+        tr.ms += (time.perf_counter() - t0) * 1000
+    return r
+
+
+def assistant_msg(r) -> dict:
+    m: dict = {"role": "assistant", "content": r.text or ""}
+    if r.tool_calls:
+        m["tool_calls"] = [{"id": c.id, "type": "function",
+                            "function": {"name": c.name,
+                                         "arguments": json.dumps(c.arguments, ensure_ascii=False)}}
+                           for c in r.tool_calls]
+    return m
+
+
+# ---------------------------------------------------------------- подсчёт
+
+REFUSAL = re.compile(
+    r"\b(cannot|can'?t|not available|unavailable|no data|not present|"
+    r"does not (?:contain|exist)|isn'?t (?:available|present)|"
+    r"unable to|not possible|no such|not stored|not recorded)\b", re.I)
+
+NUM = re.compile(r"-?\d[\d\s,]*\.?\d*")
+
+
+def numbers_in(text: str) -> list[float]:
+    out = []
+    for m in NUM.finditer(text):
+        try:
+            out.append(float(m.group().replace(" ", "").replace(",", "")))
+        except ValueError:
+            pass
+    return out
+
+
+def grade(q: dict, tr: Trace) -> dict:
+    """Три метрики решения №19.
+
+    Ограничение, которое надо назвать вслух: числовой ответ ищется среди ВСЕХ
+    чисел в тексте, поэтому возможно случайное совпадение. Для полной строгости
+    нужен структурированный вывод; сейчас это записано как долг.
+    """
+    ans = tr.answer or ""
+    refused = bool(REFUSAL.search(ans))
+
+    if q["kind"] == "none":
+        correct = refused
+    elif q.get("expected_value") is not None:
+        want = float(q["expected_value"])
+        correct = any(abs(g - want) <= 1e-3 * max(abs(want), 1e-9) for g in numbers_in(ans))
+    else:
+        correct = all(f.lower() in ans.lower() for f in q.get("expected_facts", []))
+        if correct and refused:
+            correct = False                  # сказал факт и тут же отказался - не ответ
+
+    return {
+        "correct": correct,
+        "tools_ok": set(tr.tools_used) == set(q["needs_tools"]),
+        "tools_used": tr.tools_used,
+        "steps": len(tr.steps),
+        "llm_calls": tr.llm_calls,
+        "ms": tr.ms,
+        "tokens": tr.prompt_tokens + tr.completion_tokens,
+        "refused": refused,
+        "stop_reason": tr.stop_reason,
+    }
