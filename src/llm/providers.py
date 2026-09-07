@@ -31,6 +31,7 @@ PRICES: dict[str, tuple[float, float]] = {}
 
 RETRY_STATUS = {408, 429, 500, 502, 503, 504}
 _CACHE = LLMCache(CACHE_PATH)
+_CACHE_READ = os.getenv("LLM_CACHE", "1") != "0"
 
 
 class OpenAICompatProvider:
@@ -59,7 +60,11 @@ class OpenAICompatProvider:
         params = {"temperature": temperature, "max_tokens": max_tokens, "tools": tools}
         key = make_key(self.name, self.model, messages, **params)
 
-        if (hit := _CACHE.get(key)) is not None:
+        # Чтение кеша можно выключить (LLM_CACHE=0). Это нужно ровно для двух
+        # вещей, которые с кешем измерить НЕВОЗМОЖНО: разброса между прогонами
+        # и честной латентности. Запись при этом продолжается: следующий
+        # обычный прогон снова будет бесплатным.
+        if _CACHE_READ and (hit := _CACHE.get(key)) is not None:
             return self._parse(hit, latency_ms=0.0, cached=True)
 
         body = {

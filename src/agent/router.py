@@ -27,7 +27,8 @@ tool_calls. Это структурный предел роутера в чис�
 """
 from __future__ import annotations
 
-from src.agent.base import Step, Trace, assistant_msg, execute, run_step, system_prompt
+from src.agent.base import (FINAL_SPEC, Step, Trace, assistant_msg, execute,
+                            run_step, system_prompt)
 
 
 def answer(llm, question: str) -> Trace:
@@ -38,13 +39,16 @@ def answer(llm, question: str) -> Trace:
     r = run_step(llm, messages, tr=tr)
 
     if not r.tool_calls:
-        # Модель ответила сразу: либо знает из контекста, либо отказалась.
         tr.answer = r.text
         tr.stop_reason = "no_tool_call"
         return tr
 
     messages.append(assistant_msg(r))
     for call in r.tool_calls:                 # роутер выполняет то, что запросили за один раз
+        if call.name == "final_answer":       # ответил, не заглядывая в источники
+            tr.take_final(call.arguments)
+            tr.stop_reason = "final_answer"
+            return tr
         out, ok = execute(call.name, call.arguments)
         tr.steps.append(Step(call.name, call.arguments, out, ok, 0.0))
         messages.append({"role": "tool", "tool_call_id": call.id,
@@ -54,7 +58,15 @@ def answer(llm, question: str) -> Trace:
     messages.append({"role": "user", "content":
                      "Now answer the original question using only what you already have. "
                      "If it is not enough, say plainly what is missing."})
-    r2 = run_step(llm, messages, tools=None, tr=tr)
+    # Второй раунд ДОБЫЧИ запрещён, но выйти надо тем же типизированным
+    # действием, что и у агента: иначе схемы отличались бы ещё и формой ответа.
+    r2 = run_step(llm, messages, tools=[FINAL_SPEC], tr=tr)
+
+    for call in r2.tool_calls:
+        if call.name == "final_answer":
+            tr.take_final(call.arguments)
+            tr.stop_reason = "answered_after_one_hop"
+            return tr
 
     if r2.text.strip():
         tr.answer = r2.text
@@ -69,7 +81,11 @@ def answer(llm, question: str) -> Trace:
                      "You have no tools left and cannot call any. Answer in plain text: "
                      "give the answer if you have it, otherwise state exactly what "
                      "additional information you would need."})
-    r3 = run_step(llm, messages, tools=None, tr=tr)
+    r3 = run_step(llm, messages, tools=[FINAL_SPEC], tr=tr)
+    for call in r3.tool_calls:
+        if call.name == "final_answer":
+            tr.take_final(call.arguments)
+            return tr
     tr.answer = r3.text
     return tr
 

@@ -28,7 +28,8 @@ from __future__ import annotations
 
 import json
 
-from src.agent.base import Step, Trace, assistant_msg, execute, run_step, system_prompt
+from src.agent.base import (FINAL_SPEC, Step, Trace, assistant_msg, execute,
+                            run_step, system_prompt)
 
 MAX_ROUNDS = 6          # раунд = один ответ модели, в нём может быть несколько вызовов
 MAX_TOOL_CALLS = 10     # общий потолок на вопрос
@@ -44,12 +45,20 @@ def answer(llm, question: str) -> Trace:
         r = run_step(llm, messages, tr=tr)
 
         if not r.tool_calls:
+            # Модель ответила текстом вместо final_answer. Это запасной путь:
+            # ответ принимаем, но помечаем, чтобы такие случаи было видно в
+            # прогоне отдельно, а не растворялись в общей точности.
             tr.answer = r.text
-            tr.stop_reason = "answered"
+            tr.stop_reason = "plain_text_fallback"
             return tr
 
         messages.append(assistant_msg(r))
         for call in r.tool_calls:
+            if call.name == "final_answer":
+                tr.take_final(call.arguments)
+                tr.steps.append(Step(call.name, call.arguments, "", True, 0.0))
+                tr.stop_reason = "final_answer"
+                return tr
             key = f"{call.name}:{json.dumps(call.arguments, sort_keys=True, ensure_ascii=False)}"
             if key in seen:
                 out, ok = ("TOOL ERROR: you already made this exact call and received the "
@@ -70,7 +79,11 @@ def answer(llm, question: str) -> Trace:
     messages.append({"role": "user", "content":
                      "You have no more tool calls. Answer in plain text with what you "
                      "have, or state exactly what is missing."})
-    r = run_step(llm, messages, tools=None, tr=tr)
+    r = run_step(llm, messages, tools=[FINAL_SPEC], tr=tr)
+    for call in r.tool_calls:
+        if call.name == "final_answer":
+            tr.take_final(call.arguments)
+            return tr
     tr.answer = r.text
     return tr
 

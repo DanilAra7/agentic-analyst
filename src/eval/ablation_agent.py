@@ -38,8 +38,15 @@ def run_scheme(name: str, answer_fn, llm, golden: list[dict]) -> dict:
             print(f"  {i:>2}/{len(golden)} {q['id']} СБОЙ: {type(e).__name__}: {e}", flush=True)
             continue
         g = grade(q, tr)
+        # Сохраняем ТРАССУ, а не только исход. Повод конкретный: вопрос bq5 в
+        # одном прогоне из трёх дал 6 449 вместо 7 073, и восстановить, каким
+        # запросом получено это число, оказалось невозможно - в файле лежали
+        # только метрики. Разбор провала требует шагов с аргументами.
         rows.append({"id": q["id"], "kind": q["kind"], "question": q["question"],
-                     "answer": tr.answer, **g})
+                     "answer": tr.answer,
+                     "trace": [{"tool": st.tool, "args": st.arguments,
+                                "result": st.result[:400], "ok": st.ok} for st in tr.steps],
+                     **g})
         mark = "+" if g["correct"] else "."
         print(f"  {i:>2}/{len(golden)} {q['id']:<4} {q['kind']:<5} {mark} "
               f"{','.join(g['tools_used']) or '—':<24}"
@@ -82,23 +89,81 @@ def report(res: dict) -> None:
         print(f"      ответ: {(r['answer'] or '').strip()[:150]}")
 
 
+def summarise(runs: list[dict]) -> None:
+    """Среднее и РАЗМАХ по нескольким прогонам.
+
+    Один прогон - не измерение (бэклог №37): два прогона агента до этого дали
+    0.88 и 1.00 на двухисточниковых, разница в один вопрос равна 0.125 при n=8.
+    Без размаха любое сравнение конфигураций рискует обсуждать шум.
+    Прогоны обязаны идти с LLM_CACHE=0, иначе повторы вернут тот же ответ и
+    размах окажется нулевым по построению.
+    """
+    print(f"\n=== {len(runs)} ПРОГОНА: среднее и размах ===")
+    hdr = f"{'тип':<7}{'n':>3}{'верно':>22}{'шагов':>16}{'токенов':>18}"
+    print(hdr); print("-" * len(hdr))
+
+    def cell(vals, fmt="{:.2f}"):
+        lo, hi = min(vals), max(vals)
+        mid = sum(vals) / len(vals)
+        span = "" if lo == hi else f" [{fmt.format(lo)}-{fmt.format(hi)}]"
+        return fmt.format(mid) + span
+
+    for k in KINDS + ("ВСЕГО",):
+        per = []
+        for r in runs:
+            rows = r["rows"] if k == "ВСЕГО" else [x for x in r["rows"] if x["kind"] == k]
+            if rows:
+                per.append(rows)
+        if not per:
+            continue
+        n = len(per[0])
+        print(f"{k:<7}{n:>3}"
+              f"{cell([sum(x['correct'] for x in g)/len(g) for g in per]):>22}"
+              f"{cell([sum(x['steps'] for x in g)/len(g) for g in per], '{:.1f}'):>16}"
+              f"{cell([sum(x['tokens'] for x in g)/len(g) for g in per], '{:.0f}'):>18}")
+
+    # какие вопросы вели себя нестабильно - это интереснее среднего
+    ids = {x["id"] for x in runs[0]["rows"]}
+    flaky = [i for i in sorted(ids)
+             if len({tuple(x["correct"] for x in r["rows"] if x["id"] == i) for r in runs}) > 1]
+    print(f"\nнестабильные вопросы: {', '.join(flaky) if flaky else 'нет'}")
+
+
 def main() -> None:
+    import os
+
     from src.agent import loop, router
     from src.llm.providers import OpenAICompatProvider
 
     which = sys.argv[1] if len(sys.argv) > 1 else "router"
+    n_runs = int(sys.argv[2]) if len(sys.argv) > 2 else 1
     fn = {"router": router.answer, "agent": loop.answer}
     if which not in fn:
         raise SystemExit(f"неизвестная схема {which!r}, доступны: {list(fn)}")
 
     llm = OpenAICompatProvider(settings.llm_provider, settings.llm_model)
     golden = load()
-    print(f"схема: {which}   вопросов: {len(golden)}   модель: {llm.name}/{llm.model}\n")
-    res = run_scheme(which, fn[which], llm, golden)
-    report(res)
+    cache = "выключен" if os.getenv("LLM_CACHE") == "0" else "ВКЛЮЧЁН"
+    print(f"схема: {which}   вопросов: {len(golden)}   прогонов: {n_runs}   "
+          f"модель: {llm.name}/{llm.model}   кеш: {cache}")
+    if n_runs > 1 and cache != "выключен":
+        print("  ВНИМАНИЕ: с включённым кешем повторы вернут тот же ответ, "
+              "размах будет нулевым по построению")
+    print()
+
+    runs = []
+    for k in range(n_runs):
+        if n_runs > 1:
+            print(f"--- прогон {k + 1}/{n_runs}")
+        runs.append(run_scheme(which, fn[which], llm, golden))
+
+    report(runs[-1])
+    if n_runs > 1:
+        summarise(runs)
 
     path = EVALS / f"agent_{which}.json"
-    path.write_text(json.dumps(res, ensure_ascii=False, indent=2), encoding="utf-8")
+    path.write_text(json.dumps({"scheme": which, "runs": runs}, ensure_ascii=False, indent=2),
+                    encoding="utf-8")
     print(f"\nзаписано: {path}")
 
 

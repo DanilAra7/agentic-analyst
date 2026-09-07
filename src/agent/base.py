@@ -18,7 +18,44 @@ from src.tools.search import get_search_tool
 from src.tools.sql import TOOL_SPEC as SQL_SPEC
 from src.tools.sql import SchemaLevel, describe, run
 
-TOOL_SPECS = [SQL_SPEC, SEARCH_SPEC]
+# Выход из цикла - ЯВНОЕ типизированное действие, а не отсутствие вызова.
+# Причина конкретная: раньше «отказался ли агент» определялось регуляркой по
+# свободному тексту, и она шесть раз за проект записывала верное поведение в
+# провалы («do not contain», «is missing», «conflict» вместо «conflicting»).
+# Теперь отказ и конфликт - поля, а не догадка.
+FINAL_SPEC = {
+    "type": "function",
+    "function": {
+        "name": "final_answer",
+        "description": ("Deliver your final answer. Call this exactly once, when you are "
+                        "done using the other tools. Do not answer in plain text."),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "answered": {
+                    "type": "boolean",
+                    "description": ("true if the sources actually answer the question. "
+                                    "false if they do not and you are declining - never "
+                                    "invent a plausible number instead.")},
+                "answer": {
+                    "type": "string",
+                    "description": ("The answer itself, short. If answered is false, "
+                                    "state exactly what is missing.")},
+                "sources": {
+                    "type": "array", "items": {"type": "string"},
+                    "description": "Document ids or view names the answer rests on."},
+                "conflict": {
+                    "type": "string",
+                    "description": ("If two sources disagree on the same figure or rule, "
+                                    "describe the disagreement and say which one formally "
+                                    "governs and why. Empty string if they do not.")},
+            },
+            "required": ["answered", "answer", "sources"],
+        },
+    },
+}
+
+TOOL_SPECS = [SQL_SPEC, SEARCH_SPEC, FINAL_SPEC]
 
 SYSTEM = """You are an analyst for a Brazilian e-commerce marketplace.
 
@@ -78,10 +115,22 @@ class Trace:
     completion_tokens: int = 0
     ms: float = 0.0
     stop_reason: str = ""
+    answered: bool | None = None     # None = модель не вызвала final_answer
+    sources: list[str] = field(default_factory=list)
+    conflict: str = ""
 
     @property
     def tools_used(self) -> list[str]:
-        return [s.tool for s in self.steps]
+        """Инструменты ДОБЫЧИ данных. final_answer - способ выйти из цикла,
+        а не источник, и в разметке `needs_tools` его нет."""
+        return [s.tool for s in self.steps if s.tool != "final_answer"]
+
+
+    def take_final(self, args: dict) -> None:
+        self.answered = bool(args.get("answered", True))
+        self.answer = str(args.get("answer", ""))
+        self.sources = [str(x) for x in (args.get("sources") or [])]
+        self.conflict = str(args.get("conflict") or "")
 
 
 def execute(name: str, args: dict) -> tuple[str, bool]:
@@ -169,31 +218,41 @@ def numbers_in(text: str) -> list[float]:
 def grade(q: dict, tr: Trace) -> dict:
     """Три метрики решения №19.
 
-    Ограничение, которое надо назвать вслух: числовой ответ ищется среди ВСЕХ
-    чисел в тексте, поэтому возможно случайное совпадение. Для полной строгости
-    нужен структурированный вывод; сейчас это записано как долг.
+    Отказ читается ПОЛЕМ `answered`, а не шаблоном по тексту (решение №28).
+    Регулярка остаётся только как запасной вариант, если модель не вызвала
+    final_answer вовсе - и такие случаи считаются отдельно.
+
+    Что осталось эвристикой: числовой ответ ищется среди всех чисел в поле
+    `answer`, поэтому случайное совпадение возможно. Отдельного поля под число
+    не заводим намеренно - оно подсказывало бы модели форму ответа.
     """
     ans = tr.answer or ""
-    refused = bool(REFUSAL.search(ans))
+    refused = (not tr.answered) if tr.answered is not None else bool(REFUSAL.search(ans))
 
     if q["kind"] == "none":
         correct = refused
+    elif refused:
+        correct = False
     elif q.get("expected_value") is not None:
         want = float(q["expected_value"])
         correct = any(abs(g - want) <= 1e-3 * max(abs(want), 1e-9) for g in numbers_in(ans))
     else:
         correct = all(f.lower() in ans.lower() for f in q.get("expected_facts", []))
-        if correct and refused:
-            correct = False                  # сказал факт и тут же отказался - не ответ
 
     return {
         "correct": correct,
         "tools_ok": set(tr.tools_used) == set(q["needs_tools"]),
         "tools_used": tr.tools_used,
-        "steps": len(tr.steps),
+        # Шаги = вызовы ДОБЫЧИ данных. final_answer - это выход из цикла,
+        # и если считать его шагом, каждая схема получит +1 из ниоткуда, а
+        # сравнение с прежними числами сломается.
+        "steps": len(tr.tools_used),
         "llm_calls": tr.llm_calls,
         "ms": tr.ms,
         "tokens": tr.prompt_tokens + tr.completion_tokens,
         "refused": refused,
+        "structured": tr.answered is not None,
+        "conflict": tr.conflict,
+        "sources": tr.sources,
         "stop_reason": tr.stop_reason,
     }
