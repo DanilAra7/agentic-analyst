@@ -22,13 +22,19 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timedelta, timezone
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from src.config import EVALS
 
 KIND_TO_TYPE = {"llm": "generation", "tool": "tool",
                 "retrieval": "retriever", "rerank": "span"}
+
+
+def _host() -> str:
+    return (os.getenv("LANGFUSE_HOST") or os.getenv("LANGFUSE_BASE_URL")
+            or "https://cloud.langfuse.com")
 
 
 def _client():
@@ -40,8 +46,10 @@ def _client():
             "Нет LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY в .env.\n"
             "Ключи заводятся в проекте на cloud.langfuse.com (Settings -> API keys).\n"
             "Посмотреть, что ушло бы, не отправляя: DRY_RUN=1 make langfuse")
-    c = Langfuse(public_key=pk, secret_key=sk,
-                 host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"))
+    # Langfuse разводит регионы разными адресами (eu / us), и SDK читает
+    # LANGFUSE_HOST. В .env переменную часто называют LANGFUSE_BASE_URL -
+    # принимаем оба имени, иначе трассы молча уедут не в тот регион.
+    c = Langfuse(public_key=pk, secret_key=sk, host=_host())
     if not c.auth_check():
         raise SystemExit("Langfuse отверг ключи: проверь пару public/secret и host.")
     return c
@@ -67,34 +75,42 @@ def _tree(spans: list[dict]) -> list[tuple[dict, int]]:
 
 
 def export_one(client, tr: dict) -> None:
-    t0 = datetime.fromtimestamp(tr["started_at"], tz=timezone.utc)
+    """Отправить одну трассу.
+
+    ОГРАНИЧЕНИЕ, которое надо назвать вслух. В Langfuse v4 наблюдение начинается
+    «сейчас»: `start_observation` не принимает время старта, задать можно только
+    `end_time`. Значит абсолютные метки времени в интерфейсе будут временем
+    ЭКСПОРТА, а не измерения. ДЛИТЕЛЬНОСТИ при этом сохраняются точно - именно
+    они и нужны для разбора. Настоящий момент замера кладём в метаданные, чтобы
+    он не потерялся.
+
+    Порядок закрытия важен: дети закрываются РАНЬШЕ родителей, иначе вложенность
+    в интерфейсе развалится. Поэтому создаём в прямом порядке, закрываем в обратном.
+    """
     root = client.start_observation(
         name=f"{tr['scheme']}:{tr['label']}", as_type="agent",
         input={"label": tr["label"]},
         metadata={"scheme": tr["scheme"], "total_ms": round(tr["total_ms"]),
-                  **{k: v for k, v in (tr.get("outcome") or {}).items()}},
-        start_time=t0)
+                  "measured_at": datetime.fromtimestamp(tr["started_at"],
+                                                        tz=timezone.utc).isoformat(),
+                  "trace_id_local": tr["trace_id"],
+                  **{k: v for k, v in (tr.get("outcome") or {}).items()}})
 
     made: list = []
-    cursor = 0.0
     for sp, parent in _tree(tr["spans"]):
         attrs = sp.get("attrs") or {}
         kind = KIND_TO_TYPE.get(sp["kind"], "span")
-        owner = made[parent] if parent >= 0 else root
-        start = t0 + timedelta(milliseconds=cursor)
-        kw = {"name": sp["name"], "as_type": kind, "metadata": attrs,
-              "start_time": start}
+        owner = made[parent][0] if parent >= 0 else root
+        kw = {"name": sp["name"], "as_type": kind, "metadata": attrs}
         if kind == "generation":
             kw["model"] = attrs.get("model")
             kw["usage_details"] = {"input": attrs.get("prompt_tokens", 0),
                                    "output": attrs.get("completion_tokens", 0)}
-        obs = owner.start_observation(**kw)
-        obs.end(end_time=start + timedelta(milliseconds=sp["ms"]))
-        made.append(obs)
-        if parent < 0:                       # сдвигаем курсор только по верхнему уровню
-            cursor += sp["ms"]
+        made.append((owner.start_observation(**kw), sp["ms"]))
 
-    root.end(end_time=t0 + timedelta(milliseconds=tr["total_ms"]))
+    for o, ms in reversed(made):
+        o.end(end_time=time.time_ns() + int(ms * 1e6))
+    root.end(end_time=time.time_ns() + int(tr["total_ms"] * 1e6))
 
 
 def dry_run(traces: list[dict]) -> None:
@@ -129,7 +145,7 @@ def main() -> None:
         export_one(client, tr)
     client.flush()
     print(f"отправлено трасс: {len(traces)}")
-    print(f"смотреть: {os.getenv('LANGFUSE_HOST', 'https://cloud.langfuse.com')}")
+    print(f"смотреть: {_host()}")
 
 
 if __name__ == "__main__":
