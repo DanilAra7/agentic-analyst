@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-trace = ["langfuse>=2.50"]
+trace = ["langfuse>=4.0"]   # код использует API v4: start_observation / as_type
 dev = ["pytest>=8.0", "ruff>=0.6"]
 
 [tool.ruff]

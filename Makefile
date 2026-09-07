@@ -1,5 +1,5 @@
 .PHONY: setup data corpus chunks index golden eval ablation doc-level \
-	sql-ablation router agent injection latency clean help
+	sql-ablation router agent injection latency latency-local langfuse clean help
 
 help:           ## показать список команд
 	@grep -E '^[a-z-]+:.*?##' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "};{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -46,6 +46,12 @@ injection:      ## пять заложенных атак; AGENT_DEFENSE=0 от�
 
 latency:        ## бюджет латентности по этапам (только без кеша)
 	LLM_CACHE=0 uv run python -m src.eval.latency
+
+latency-local:  ## только локальные этапы: без квоты провайдера, пишет трассы
+	LAT_LOCAL_ONLY=1 uv run python -m src.eval.latency
+
+langfuse:       ## отправить трассы в Langfuse; DRY_RUN=1 показать без отправки
+	uv run python -m src.obs.langfuse_export
 
 clean:
 	rm -rf data/*.duckdb data/*.npy llm_cache.sqlite evals/rerank_scores_*.json

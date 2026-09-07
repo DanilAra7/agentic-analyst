@@ -68,10 +68,12 @@ def local_stages(n_runs: int = 5) -> None:
     tool.search("warmup", top_k=3)                      # прогрев обязателен
 
     dense, rerank, sql = [], [], []
+    traces: list[obs.Trace] = []
     for _ in range(n_runs):
-        for q in qs:
-            with obs.trace("local", "stages") as tr:
+        for qi, q in enumerate(qs):
+            with obs.trace(f"local-{qi}", "stages") as tr:
                 tool.search(q, top_k=5)
+            traces.append(tr)
             for sp, own in zip(tr.spans, tr.self_ms()):
                 (dense if sp.kind == "retrieval" else rerank).append(own)
     for _ in range(n_runs):
@@ -91,6 +93,9 @@ def local_stages(n_runs: int = 5) -> None:
                        ("SQL-запрос", sql)):
         print(f"{name:<26}{len(vals):>4}{pct(vals,50):>9.0f}м{pct(vals,95):>9.0f}м"
               f"{max(vals):>9.0f}м")
+    # Трассы пишем и здесь: они позволяют проверить экспортёр в Langfuse
+    # без квоты провайдера, на настоящих интервалах поиска и реранка.
+    obs.dump(traces, EVALS / "traces.jsonl")
     tot = pct(dense, 50) + pct(rerank, 50)
     print()
     print(f"один вызов search_docs по медиане: {tot:.0f} мс, "
