@@ -32,6 +32,15 @@ SNIPPET_CHARS = 1800   # обрезка текста куска: размен к
 # «токены против полноты», её стоит померить отдельно - бэклог №34.
 
 
+# Поля, по которым определяется, какой документ формально главнее. Они лежали
+# в шапке документа с самого M1 и никогда не доходили до модели: в текст чанка
+# дописывался только title. Из-за этого агент, получив правило «предпочитай
+# документ с версией и цепочкой отмены», честно ответил «ни у одного из них
+# версии нет» - хотя у настоящего регламента version 1.4, а у подложного ничего.
+# Правило без доказательств не работает. Решение №27.
+AUTHORITY = ("version", "effective_from", "status", "supersedes")
+
+
 @dataclass
 class Passage:
     chunk_id: str
@@ -39,6 +48,7 @@ class Passage:
     title: str
     text: str
     score: float
+    meta: dict | None = None
 
 
 class DocSearchTool:
@@ -66,7 +76,8 @@ class DocSearchTool:
             picked = [(h, h.score) for h in hits[:top_k]]
 
         return [Passage(h.chunk_id, h.chunk_id.split("#")[0],
-                        str(h.meta.get("title", "")), h.text, s) for h, s in picked]
+                        str(h.meta.get("title", "")), h.text, s, h.meta)
+                for h, s in picked]
 
     def as_text(self, query: str, top_k: int = TOP_K) -> str:
         """Как результат выглядит для модели.
@@ -81,7 +92,14 @@ class DocSearchTool:
         out = []
         for i, p in enumerate(ps, 1):
             body = p.text[:SNIPPET_CHARS] + ("..." if len(p.text) > SNIPPET_CHARS else "")
-            out.append(f"[{i}] {p.doc_id} - {p.title}\n{body}")
+            m = p.meta or {}
+            auth = ", ".join(f"{k}={m[k]}" for k in AUTHORITY if m.get(k))
+            head = f"[{i}] {p.doc_id} - {p.title}"
+            if auth:
+                head += f"\n    ({auth})"
+            else:
+                head += "\n    (no version, no effective date, no supersedes chain)"
+            out.append(f"{head}\n{body}")
         return "\n\n".join(out)
 
 
