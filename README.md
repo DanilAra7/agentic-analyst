@@ -260,10 +260,12 @@ Written down rather than hidden — see `BACKLOG.md` for all 27 items.
   are counted more times *and* score lower.
 - **Unstructured**: 378 synthetic policy documents (~52k words) generated
   deterministically by `src/ingest/build_docs.py` on top of the real dataset's
-  facts. Five of them (`injection-*.md`) are planted prompt-injection attacks,
-  marked `synthetic_attack: true`; they are not policy and must not be read as such — shipping-rate tables, regional handbooks, superseded and in-force
-  policy versions, and 250 near-identical bulletins acting as distractors. The
-  retrieval difficulties in this corpus are planted on purpose.
+  facts: shipping-rate tables, regional handbooks, superseded and in-force policy
+  versions, and 250 near-identical bulletins acting as distractors. The retrieval
+  difficulties in this corpus are planted on purpose.
+- Five of those documents (`injection-*.md`, front matter `synthetic_attack: true`)
+  are planted prompt-injection attacks. They are not policy and must not be read
+  as such; they exist so the defence can be measured rather than assumed.
 
 ---
 
@@ -276,7 +278,7 @@ Nothing to deploy: everything runs locally from a virtualenv.
 | SQL | DuckDB | reads CSV directly, real window functions, no server |
 | Embeddings | bge-m3, local | multilingual, no rate limit, zero cost |
 | Reranker | bge-reranker-v2-m3, local | cross-encoder over the candidate window |
-| Vector search | numpy exact | 422 chunks; ANN is a later measured trade-off |
+| Vector search | numpy exact | 427 chunks; ANN is a later measured trade-off |
 | LLM | Mistral (worker + separate judge) | OpenAI-compatible, free tier |
 | Tracing | Langfuse | planned, M4 |
 
