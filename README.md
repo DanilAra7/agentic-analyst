@@ -181,6 +181,109 @@ impossible to express, rather than merely discouraged.
 Differences between levels are one question on n=34 and are not distinguishable
 from noise; the interval is stated for that reason.
 
+### Where the time goes
+
+Two conditions, without which a latency number is a lie. **The cache is off** — with
+it a repeat run answers in a millisecond and a three-second system looks instant; the
+script refuses to start otherwise. **The models are warmed up** — the first trace
+reported 10 s for a dense search over 427 vectors, which cannot happen: those were
+model weights loading. Cold start is a separate figure, not something to smear across
+the measurement.
+
+| stage | p50 | p95 |
+|---|---|---|
+| cold start, loading both models | **18 s** | — |
+| dense search, 50 candidates | 34 ms | 43 ms |
+| **cross-encoder reranker, window 20** | **1 995 ms** | 2 285 ms |
+| SQL query | 19 ms | 26 ms |
+
+**One `search_docs` call costs 2 029 ms and 98% of that is the reranker.** Optimising
+latency in this system means optimising the reranker; everything else could be made
+twice as fast without being noticed.
+
+### What the reranker actually costs
+
+Quality per window was known from M2, its share of latency from the tracing. The
+missing piece was the pair.
+
+| window | recall@1 | recall@5 | p50 search | cost of one point of recall@5 |
+|---|---|---|---|---|
+| off | **0.765** | 0.863 | **26 ms** | — |
+| 10 | 0.686 | 0.902 | 1 186 ms | 298 ms |
+| **20** | 0.667 | 0.941 | 2 100 ms | **266 ms** |
+| 50 | 0.667 | 0.961 | 4 529 ms | 459 ms |
+
+Latency is linear in the window, roughly 100 ms per candidate. There is no economy of
+scale: every candidate is a separate transformer pass, which is the whole nature of a
+cross-encoder. The last column sharpens the earlier claim: window 20 is not merely
+"the knee of the curve", it is **the best price per point of quality**. Going to 50
+buys +0.020 recall@5 at twice the cost per point.
+
+### Conditional reranking: the signal exists and is weak
+
+Skip the reranker when dense retrieval is already confident. It aims at two problems
+at once: 2.1 s of latency, and the recall@1 regression the reranker causes. The signal
+is the **confidence gap** — the cosine difference between the first and second
+candidate. The threshold was swept, not chosen.
+
+| threshold | reranked | recall@1 | recall@5 | expected p50 |
+|---|---|---|---|---|
+| never rerank | 0% | 0.765 | 0.863 | 26 ms |
+| 0.04 | 67% | 0.686 | 0.922 | 1 426 ms |
+| **0.06** | 88% | 0.667 | **0.941** | **1 879 ms** |
+| always rerank | 100% | 0.667 | 0.941 | 2 126 ms |
+
+At threshold 0.06 quality matches unconditional reranking on both metrics and latency
+drops 12%. Real, but modest, and the data says why: the confidence gap is narrowly
+distributed (median 0.030, maximum 0.088), so almost every query lands in the
+"uncertain" band. The honest phrasing is not "we made it 12% faster" but "we measured
+what this technique is worth here, and it is 12% at no quality cost".
+
+The rule is **not** wired into the tool. A third branch and a parameter that needs
+recalibrating on every model or corpus change is a poor trade for 12% — until there is
+a hard latency budget, at which point it is ready and measured.
+
+---
+
+## What follows from all this
+
+Six milestones, 35 recorded decisions, 50 backlog items. The thesis the numbers
+support is narrow and worth stating plainly.
+
+**Measurement repeatedly overturned a reasonable-sounding decision.** Not once, as a
+lesson; five times, each with the number that did it.
+
+| the intuition | what the measurement said |
+|---|---|
+| Describe the grain in the prompt so the model stops mixing views | Zero grain errors at every description level. **Schema design had already done it** — the classic mistake was made impossible to express, not discouraged |
+| Chunks lose their state, so add contextual retrieval | The failure class did not exist; it was an artifact of bad labels |
+| Search the document first, then inside it | Identical to flat search to three decimals; worse when the first stage is narrow |
+| Add BM25 — hybrid search always helps | Zero of 51 hard questions contain an exact term. **The question set cannot see BM25's value**; that is a defect of the instrument, not a verdict on the method |
+| Add a reranker, quality improves | recall@5 up, **recall@1 down**. Which is better depends on who reads the output |
+
+**The measuring instrument lied six times, and every time it lied in our favour or
+against a correct behaviour.** A judge returned "0 false misses out of 18" — a
+convenient answer that a control run showed to be garbage. A regex scored two correct
+refusals as failures, and later scored the single best possible answer as a failure
+because it did not know the word "conflict". Reference SQL rounded where the model did
+not, sending correct answers to the failure list. The rule that came out of it:
+**before believing a number, look at the failures one by one — especially when the
+number is convenient.**
+
+**Three defects were only visible end to end.** Retrieval metrics check whether the
+right chunk was returned; they cannot see whether an answer is extractable from it. A
+truncation limit cut a table in half, a document lost its title to an indentation bug,
+and a provider field had to be round-tripped for chained tool calls to work at all —
+none of these move recall@k, and all three broke real answers.
+
+**What this project does not know.** The judge has never been validated against human
+labels. The question sets are small enough that a single flaky question moves the
+headline by 0.125. Every conclusion rests on one model. Latency for the LLM stage is
+unmeasured. These are listed here and in `BACKLOG.md` because a measurement whose
+limits are unstated is worth less than one that names them.
+
+---
+
 ## Status
 
 | | | |
@@ -189,12 +292,14 @@ from noise; the interval is stated for that reason.
 | M1 | corpus, chunking, embeddings, dense search, two golden sets, baseline | **done** |
 | M2 | retrieval ablation: reranker, chunk enrichment, hierarchy, BM25 check | **done** |
 | M3 | agent: SQL tool, document search tool, router baseline, agent loop, prompt-injection defence | **done** |
-| M4 | Langfuse: traces, per-step latency and token breakdown | not started |
-| M5 | agent flow optimisation, before/after measurement | not started |
+| M4 | tracing with self-time, latency budget, Langfuse export | **done** |
+| M5 | reranker cost curve, conditional reranking, measured | **done** |
 
-Latency figures for the agent are not published: the LLM cache makes repeat runs
-free and instant, which is exactly what an ablation needs and exactly what makes a
-latency number meaningless. A separate uncached benchmark is backlog item 35.
+One hole is left on purpose and is named rather than hidden: the **LLM share of the
+latency budget** is not measured. Uncached runs exhausted the provider quota, and the
+local stages — which are the bulk of the budget — need no quota and are final. The
+harness is resilient and writes traces incrementally, so the run resumes whenever a
+key is available (backlog item 46).
 
 ---
 
@@ -242,6 +347,11 @@ Written down rather than hidden — see `BACKLOG.md` for all 27 items.
   the two-source questions; the difference is one question where the agent looped
   and hit the round limit. At n=8 that is 0.125 - coarser than differences worth
   discussing (item 37).
+- **The LLM share of the latency budget is unmeasured** (item 46). Local stages are
+  final; the provider quota ran out on uncached runs.
+- Absolute timestamps in Langfuse are export time, not measurement time: the v4 SDK
+  starts an observation "now" and only accepts an end time. Durations are exact, and
+  the real measurement time is carried in metadata.
 - The agent answers `nq1` ("how many unique customers") confidently and wrongly in
   every configuration tested: bare SQL tool at all four schema levels, router, and
   agent. `customer_id` is unique per order and the real customer identifier is not
@@ -317,6 +427,15 @@ make agent                # the loop: chained tool calls
 make injection            # five planted attacks, with and without the defence
 ```
 
+Measurement that needs no API key at all:
+
+```bash
+make latency-local        # stage latency budget; also writes traces
+make langfuse             # export traces (DRY_RUN=1 shows them without sending)
+uv run python -m src.eval.rerank_cost   # quality against cost per window
+uv run python -m src.eval.rerank_gate   # conditional reranking, threshold sweep
+```
+
 `AGENT_DEFENSE=0` turns the injection defence off, which is how the before/after
 column in the table above is produced.
 
@@ -331,6 +450,7 @@ column in the table above is produced.
 | `src/rag/` | chunking, embedding index, dense search, reranker |
 | `src/tools/` | the two agent tools: read-only SQL over DuckDB, document search |
 | `src/agent/` | shared plumbing, the router baseline, the agent loop |
+| `src/obs/` | tracing with self-time accounting, Langfuse exporter |
 | `src/eval/` | golden set synthesis, retrieval metrics, judge audit, all ablations |
 | `src/ingest/` | Olist → DuckDB, synthetic corpus generator, planted attacks |
 | `src/llm/` | provider abstraction, retries, on-disk cache |
