@@ -13,6 +13,7 @@ import re
 import time
 from dataclasses import dataclass, field
 
+from src.obs import trace as obs
 from src.tools.search import TOOL_SPEC as SEARCH_SPEC
 from src.tools.search import get_search_tool
 from src.tools.sql import TOOL_SPEC as SQL_SPEC
@@ -141,10 +142,15 @@ def execute(name: str, args: dict) -> tuple[str, bool]:
                 f"{args['__malformed__'][:200]}"), False
     try:
         if name == "sql_query":
-            r = run(args.get("sql", ""))
-            return r.as_text(), r.ok
+            with obs.span("sql_query", "tool"):
+                r = run(args.get("sql", ""))
+                obs.note(rows=len(r.rows), ok=r.ok)
+                return r.as_text(), r.ok
         if name == "search_docs":
-            return get_search_tool().as_text(args.get("query", "")), True
+            with obs.span("search_docs", "tool"):
+                out = get_search_tool().as_text(args.get("query", ""))
+                obs.note(chars=len(out))
+                return out, True
         return f"TOOL ERROR: no tool named {name!r}. Available: sql_query, search_docs", False
     except Exception as e:                     # noqa: BLE001
         return f"TOOL ERROR: {type(e).__name__}: {e}", False
@@ -161,7 +167,11 @@ def system_prompt(defended: bool | None = None) -> str:
 
 def run_step(llm, messages: list[dict], tools=TOOL_SPECS, tr: Trace | None = None):
     t0 = time.perf_counter()
-    r = llm.complete(messages, tools=tools, temperature=0.0, max_tokens=900)
+    with obs.span("llm", "llm", model=llm.model):
+        r = llm.complete(messages, tools=tools, temperature=0.0, max_tokens=900)
+        obs.note(cached=r.cached, prompt_tokens=r.prompt_tokens,
+                 completion_tokens=r.completion_tokens,
+                 tool_calls=[c.name for c in r.tool_calls])
     if tr is not None:
         tr.llm_calls += 1
         tr.prompt_tokens += r.prompt_tokens

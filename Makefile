@@ -1,5 +1,5 @@
 .PHONY: setup data corpus chunks index golden eval ablation doc-level \
-	sql-ablation router agent injection clean help
+	sql-ablation router agent injection latency clean help
 
 help:           ## показать список команд
 	@grep -E '^[a-z-]+:.*?##' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "};{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -43,6 +43,9 @@ agent:          ## цикл агента со сцеплением вызово�
 
 injection:      ## пять заложенных атак; AGENT_DEFENSE=0 отключает защиту
 	uv run python -m src.eval.injection
+
+latency:        ## бюджет латентности по этапам (только без кеша)
+	LLM_CACHE=0 uv run python -m src.eval.latency
 
 clean:
 	rm -rf data/*.duckdb data/*.npy llm_cache.sqlite evals/rerank_scores_*.json

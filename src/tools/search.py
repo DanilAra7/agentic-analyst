@@ -21,6 +21,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 
+from src.obs import trace as obs
+
 CANDIDATES = 50        # сколько достаёт плотный поиск
 RERANK_WINDOW = 20     # сколько из них переупорядочивает cross-encoder
 TOP_K = 5              # сколько уходит в контекст модели
@@ -66,10 +68,15 @@ class DocSearchTool:
         return get_reranker()
 
     def search(self, query: str, top_k: int = TOP_K) -> list[Passage]:
-        hits = self._retriever.search(query, k=CANDIDATES if self.use_reranker else top_k)
+        # Два этапа меряются РАЗДЕЛЬНО: плотный поиск - миллисекунды,
+        # cross-encoder - секунды. Общая цифра «поиск занял 2.5 с» правдива
+        # и бесполезна: непонятно, что резать.
+        with obs.span("dense", "retrieval", k=CANDIDATES):
+            hits = self._retriever.search(query, k=CANDIDATES if self.use_reranker else top_k)
         if self.use_reranker:
             head = hits[:RERANK_WINDOW]
-            scores = self._reranker.score(query, [h.text for h in head])
+            with obs.span("rerank", "rerank", window=RERANK_WINDOW):
+                scores = self._reranker.score(query, [h.text for h in head])
             order = sorted(range(len(head)), key=lambda i: -float(scores[i]))
             picked = [(head[i], float(scores[i])) for i in order[:top_k]]
         else:
