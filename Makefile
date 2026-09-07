@@ -1,4 +1,5 @@
-.PHONY: setup data chunks index golden eval ablation clean help
+.PHONY: setup data corpus chunks index golden eval ablation doc-level \
+	sql-ablation router agent injection clean help
 
 help:           ## показать список команд
 	@grep -E '^[a-z-]+:.*?##' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "};{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -30,6 +31,18 @@ ablation:       ## ablation по реранкеру: качество проти
 
 doc-level:      ## замер иерархического поиска (решение №14)
 	uv run python -m src.eval.ablation_doc_level
+
+sql-ablation:   ## text-to-SQL на четырёх уровнях описания схемы
+	uv run python -m src.eval.ablation_sql
+
+router:         ## бейзлайн агента: один раунд вызовов инструментов
+	uv run python -m src.eval.ablation_agent router
+
+agent:          ## цикл агента со сцеплением вызовов
+	uv run python -m src.eval.ablation_agent agent
+
+injection:      ## пять заложенных атак; AGENT_DEFENSE=0 отключает защиту
+	uv run python -m src.eval.injection
 
 clean:
 	rm -rf data/*.duckdb data/*.npy llm_cache.sqlite evals/rerank_scores_*.json
