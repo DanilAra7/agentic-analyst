@@ -448,7 +448,7 @@ column in the table above is produced.
 | Path | What |
 |---|---|
 | `DECISIONS.md` | **14 architectural decisions**, each with alternatives, cost and the number that verifies it |
-| `BACKLOG.md` | 50 items, 3 of them closed, each tied to observed evidence |
+| `BACKLOG.md` | 50 items, 6 of them closed, each tied to observed evidence |
 | `src/rag/` | chunking, embedding index, dense search, reranker |
 | `src/tools/` | the two agent tools: read-only SQL over DuckDB, document search |
 | `src/agent/` | shared plumbing, the router baseline, the agent loop |
