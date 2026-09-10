@@ -1,11 +1,11 @@
-"""Разбиение корпуса на чанки.
+"""Splitting the corpus into chunks.
 
-Решение №2 в DECISIONS.md: фиксированный размер с перекрытием, без учёта
-структуры документа. Это намеренно наивный бейзлайн - улучшения будут
-измеряться относительно него.
+Decision #2 in DECISIONS.md: fixed size with overlap, ignoring document
+structure. This is a deliberately naive baseline - improvements will be measured
+against it.
 
-Токенизируем токенизатором самой эмбеддинг-модели, а не приблизительно по
-словам: «400 токенов» должно означать то же самое, что понимает модель.
+We tokenise with the embedding model's own tokeniser rather than approximately by
+words: "400 tokens" must mean the same thing the model means.
 """
 from __future__ import annotations
 
@@ -21,14 +21,14 @@ CHUNK_TOKENS = 400
 OVERLAP_TOKENS = 60
 CHUNKS_PATH = EVALS / "chunks.jsonl"
 
-# Обогащение чанка контекстом документа перед индексацией.
-#   none        — как было: в индекс идёт только тело куска
-#   title       — плюс строка «название документа | его код»
-#   structural  — плюс последний заголовок раздела и шапка таблицы над куском
-# Зачем. Кусок-продолжение уходил в индекс безымянным: название документа лежало
-# в метаданных и в эмбеддинг не попадало. Вопрос «когда придёт заказ в
-# Рио-Гранди-ду-Норти» не находил кусок OPS-RN-001#1, потому что этих слов в
-# тексте куска нет — они остались в куске #0.
+# Enriching a chunk with document context before indexing.
+#   none        - as before: only the chunk body goes into the index
+#   title       - plus a line "document title | its code"
+#   structural  - plus the last section heading and table header above the chunk
+# Why. A continuation chunk went into the index nameless: the document title sat
+# in the metadata and never reached the embedding. The question "when will an
+# order arrive in Rio Grande do Norte" did not find chunk OPS-RN-001#1, because
+# those words are not in the chunk text - they stayed in chunk #0.
 ENRICH = os.getenv("CHUNK_ENRICH", "title")
 
 HEADING = re.compile(r"^(#{1,6})\s+(.+)$", re.M)
@@ -47,19 +47,19 @@ class Chunk:
 
 
 def parse_frontmatter(raw: str) -> tuple[dict[str, str], str]:
-    """Минимальный разбор YAML-шапки. Полный YAML тут не нужен: шапки мы
-    генерируем сами и знаем, что там только `ключ: значение`.
+    """Minimal YAML front-matter parsing. Full YAML is not needed here: we
+    generate the headers ourselves and know they hold only `key: value`.
 
-    Разбор построчный, а не по `raw.startswith("---")`. Причина конкретная:
-    один документ из 373 (`category-restrictions.md`) вышел из генератора с
-    отступом в 4 пробела. Проверка на начало строки его не узнавала, шапка
-    не разбиралась, документ уходил в индекс БЕЗ названия, а сам текст шапки
-    попадал внутрь чанка.
-    Дефект прожил весь M1 и M2 незамеченным, потому что метрики поиска
-    смотрят только на chunk_id: нужный кусок находился, а то, что из него
-    невозможно извлечь ответ, метрика recall не видит в принципе.
-    Заодно снимаем общий отступ с тела: в markdown 4 пробела превращают
-    таблицу в блок кода.
+    Parsing goes line by line rather than through `raw.startswith("---")`. The
+    reason is concrete: one document out of 373 (`category-restrictions.md`) came
+    out of the generator indented by 4 spaces. A start-of-string check did not
+    recognise it, the front matter was not parsed, the document went into the
+    index WITHOUT a title, and the header text itself ended up inside the chunk.
+    The defect lived through all of M1 and M2 unnoticed, because retrieval metrics
+    look only at chunk_id: the right chunk was found, and the fact that no answer
+    could be extracted from it is something recall cannot see at all.
+    While we are here we also strip the common indent from the body: in markdown
+    4 spaces turn a table into a code block.
     """
     lines = raw.splitlines()
     i = 0
@@ -82,17 +82,18 @@ def parse_frontmatter(raw: str) -> tuple[dict[str, str], str]:
 
 
 def split_tokens(n_tokens: int, size: int, overlap: int) -> list[tuple[int, int]]:
-    """Границы окон в ИНДЕКСАХ токенов, а не сами токены.
+    """Window boundaries as token INDICES, not the tokens themselves.
 
-    Раньше функция возвращала токены, а текст чанка собирался через
-    `tok.decode`. Это оказалось потерей: токенизатор bge-m3 не сохраняет
-    переводы строк, и в индекс с самого M1 попадали куски со слипшимися
-    строками — таблица превращалась в одну строку, заголовки теряли границы.
-    Теперь длину меряем в токенах (это по-прежнему то, что понимает модель),
-    а сам текст режем из ОРИГИНАЛА по символьным смещениям.
+    The function used to return tokens, and the chunk text was reassembled with
+    `tok.decode`. That turned out to be lossy: the bge-m3 tokeniser does not
+    preserve newlines, and since M1 chunks with collapsed lines had been going
+    into the index - a table turned into one line, headings lost their
+    boundaries. Now length is measured in tokens (still what the model
+    understands), while the text itself is cut from the ORIGINAL by character
+    offsets.
     """
     if size <= overlap:
-        raise ValueError("Перекрытие должно быть меньше размера чанка")
+        raise ValueError("Overlap must be smaller than the chunk size")
     step = size - overlap
     out = []
     for start in range(0, max(n_tokens, 1), step):
@@ -106,16 +107,16 @@ def split_tokens(n_tokens: int, size: int, overlap: int) -> list[tuple[int, int]
 
 
 def context_header(meta: dict, prefix: str, mode: str) -> str:
-    """Строка контекста, которая дописывается в начало куска.
+    """The context line prepended to the chunk.
 
-    `prefix` — тело документа ДО этого куска: из него берём последний заголовок
-    раздела и последнюю шапку таблицы, то есть ровно тот контекст, который
-    нарезка отрезала.
+    `prefix` is the document body BEFORE this chunk: from it we take the last
+    section heading and the last table header - exactly the context that chunking
+    cut away.
 
-    Чем платим. Одинаковая шапка у всех кусков одного документа делает их
-    похожими друг на друга. Это должно помочь найти нужный ДОКУМЕНТ и может
-    помешать выбрать нужный КУСОК внутри него. Обе метрики уже считаются
-    (lenient и strict), так что размен будет виден, а не предполагаем.
+    What it costs. An identical header on every chunk of a document makes them
+    resemble each other. That should help find the right DOCUMENT and may hurt
+    picking the right CHUNK inside it. Both metrics are already computed (lenient
+    and strict), so the trade-off will be visible rather than assumed.
     """
     if mode == "none":
         return ""
@@ -145,7 +146,7 @@ def build_chunks(mode: str | None = None) -> list[Chunk]:
 
         for idx, (a, b) in enumerate(split_tokens(len(offsets), CHUNK_TOKENS, OVERLAP_TOKENS)):
             char_a, char_b = offsets[a][0], offsets[b - 1][1]
-            body_slice = body[char_a:char_b]          # оригинал, переводы строк на месте
+            body_slice = body[char_a:char_b]          # the original, newlines intact
             text = context_header(meta, body[:char_a], mode) + body_slice
             chunks.append(
                 Chunk(
@@ -173,13 +174,13 @@ def main() -> None:
     multi = sum(1 for d in {c.doc_id for c in chunks}
                 if sum(1 for c in chunks if c.doc_id == d) > 1)
 
-    print(f"  документов          {docs:>7,}")
-    print(f"  чанков              {len(chunks):>7,}")
-    print(f"  документов >1 чанка {multi:>7,}")
-    print(f"  токенов: медиана {sorted(toks)[len(toks)//2]:>4}  "
-          f"мин {min(toks):>4}  макс {max(toks):>4}")
-    print(f"  случайный recall@5  {5/len(chunks)*100:>6.2f}%")
-    print(f"  обогащение          {ENRICH:>7}")
+    print(f"  documents           {docs:>7,}")
+    print(f"  chunks              {len(chunks):>7,}")
+    print(f"  documents >1 chunk  {multi:>7,}")
+    print(f"  tokens: median {sorted(toks)[len(toks)//2]:>4}  "
+          f"min {min(toks):>4}  max {max(toks):>4}")
+    print(f"  random recall@5     {5/len(chunks)*100:>6.2f}%")
+    print(f"  enrichment          {ENRICH:>7}")
     print(f"\n  {CHUNKS_PATH}")
 
 

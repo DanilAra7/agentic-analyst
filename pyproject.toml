@@ -1,7 +1,7 @@
 [project]
 name = "agentic-analyst"
 version = "0.1.0"
-description = "Агент-аналитик над e-commerce данными: RAG + SQL, с измеренными компромиссами"
+description = "An analyst agent over e-commerce data: RAG + SQL, with measured trade-offs"
 requires-python = ">=3.10"
 dependencies = [
     "duckdb>=1.1",
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-trace = ["langfuse>=4.0"]   # код использует API v4: start_observation / as_type
+trace = ["langfuse>=4.0"]   # the code uses the v4 API: start_observation / as_type
 dev = ["pytest>=8.0", "ruff>=0.6"]
 
 [tool.ruff]

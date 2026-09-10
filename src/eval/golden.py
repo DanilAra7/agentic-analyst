@@ -1,20 +1,20 @@
-"""Синтез golden set.
+"""Golden set synthesis.
 
-Размеченных данных нет, поэтому строим их сами: по чанку модель пишет вопрос,
-ответ на который в этом чанке содержится. Получаются пары «вопрос -> эталонный
-чанк», по которым считается recall@k.
+There is no labelled data, so we build it ourselves: given a chunk, the model
+writes a question that this chunk answers. The result is "question -> gold chunk"
+pairs, and recall@k is computed against them.
 
-Две ловушки, которые здесь обходятся явно:
+Two traps are dodged explicitly here:
 
-1. НЕОДНОЗНАЧНОСТЬ. В корпусе 27 почти одинаковых региональных справочников и
-   250 бюллетеней. Вопрос «какой порог бесплатной доставки?» отвечается любым из
-   27 документов, и эталонная метка становится враньём. Поэтому от модели
-   требуется вопрос, однозначно указывающий на конкретный документ, а ответ
-   без различающей сущности отбраковывается.
+1. AMBIGUITY. The corpus holds 27 nearly identical regional handbooks and 250
+   bulletins. The question "what is the free shipping threshold?" is answered by
+   any of the 27 documents, and the gold label becomes a lie. So the model is
+   required to write a question that points unambiguously at one document, and an
+   answer without a distinguishing entity is rejected.
 
-2. ПЕРЕКОС ПО СЕМЕЙСТВАМ. Бюллетеней в 30 раз больше, чем политик. Без
-   стратификации golden set состоял бы почти только из них, и метрика мерила бы
-   поиск по бюллетеням, а не по корпусу.
+2. FAMILY SKEW. There are 30x more bulletins than policies. Without
+   stratification the golden set would consist almost entirely of them, and the
+   metric would measure search over bulletins rather than over the corpus.
 """
 from __future__ import annotations
 
@@ -33,11 +33,11 @@ GOLDEN_PATH = EVALS / "golden_set.jsonl"
 GOLDEN_HARD_PATH = EVALS / "golden_set_hard.jsonl"
 SEED = 17
 
-# Сколько вопросов брать из каждого семейства документов
-# BUL исключены намеренно: 250 почти одинаковых бюллетеней, по нескольку на
-# штат с повторяющимися причинами. Вопрос по такому честно отвечается несколькими
-# документами сразу, и единственная эталонная метка была бы неверной. В корпусе
-# они остаются как отвлекающие документы - именно они делают поиск трудным.
+# How many questions to draw from each document family.
+# BUL is excluded deliberately: 250 nearly identical bulletins, several per state
+# with repeating reasons. A question about one of those is honestly answered by
+# several documents at once, and a single gold label would be wrong. They stay in
+# the corpus as distractors - they are exactly what makes search hard.
 QUOTA = {"POL": 60, "OPS": 30, "CAT": 20, "FAQ": 40}
 
 PROMPT = """You are building an evaluation set for a document search system.
@@ -91,7 +91,7 @@ def family(doc_id: str) -> str:
 
 
 def distinguishing_tokens(meta: dict) -> list[str]:
-    """Сущности, которые обязаны попасть в вопрос, иначе он неоднозначен."""
+    """Entities the question must contain, otherwise it is ambiguous."""
     out = []
     if code := meta.get("state_code"):
         out.append(code)
@@ -121,19 +121,19 @@ def sample_chunks(chunks: list[dict]) -> list[dict]:
 
 
 def validate(question: str, chunk: dict) -> str | None:
-    """Возвращает причину отбраковки или None, если вопрос годен."""
+    """Returns the rejection reason, or None if the question is usable."""
     q = question.strip()
     if not q or len(q) < 15:
-        return "слишком короткий"
+        return "too short"
     if "\n" in q or q.count("?") > 1:
-        return "не один вопрос"
+        return "not a single question"
     if not q.endswith("?"):
-        return "не вопрос"
+        return "not a question"
     if BAD_SELF_REFERENCE.search(q):
-        return "ссылается на документ"
+        return "refers to the document"
     needed = distinguishing_tokens(chunk["meta"])
     if needed and not any(t.lower() in q.lower() for t in needed):
-        return f"неоднозначен, нет ни одного из {needed[:2]}"
+        return f"ambiguous, contains none of {needed[:2]}"
     return None
 
 
@@ -141,8 +141,8 @@ def generate(limit: int | None = None, verbose: bool = False,
              hard: bool = False) -> list[dict]:
     llm = get_llm()
     if hard:
-        # Те же самые чанки, что и в лёгком наборе. Единственная переменная —
-        # формулировка вопроса, поэтому разница метрик measures ровно её.
+        # The same chunks as in the easy set. The only variable is the wording
+        # of the question, so the metric difference measures exactly that.
         by_id = {c['chunk_id']: c for c in load_chunks()}
         with GOLDEN_PATH.open(encoding='utf-8') as f:
             picked = [by_id[json.loads(l)['gold_chunk_id']] for l in f]
@@ -170,10 +170,10 @@ def generate(limit: int | None = None, verbose: bool = False,
         }
         (rejected if why else kept).append({**row, "reject_reason": why} if why else row)
         if verbose:
-            mark = "ОТБРАК" if why else "  ok  "
+            mark = "REJECT" if why else "  ok  "
             print(f"[{mark}] {c['doc_id']:<32} {q[:78]}")
             if why:
-                print(f"          причина: {why}")
+                print(f"          reason: {why}")
     return kept, rejected
 
 
@@ -185,7 +185,7 @@ def main(limit: int | None = None, verbose: bool = False, hard: bool = False) ->
         for row in kept:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
     total = len(kept) + len(rejected)
-    print(f"\n  сгенерировано {total}, годных {len(kept)}, отбраковано {len(rejected)}")
+    print(f"\n  generated {total}, usable {len(kept)}, rejected {len(rejected)}")
     if rejected:
         from collections import Counter
         for why, n in Counter(r["reject_reason"] for r in rejected).most_common():

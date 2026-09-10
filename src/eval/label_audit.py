@@ -1,12 +1,12 @@
-"""Аудит эталонных меток.
+"""Auditing the gold labels.
 
-Долг №16: у каждого вопроса одна правильная метка, но в корпусе несколько
-документов могут честно отвечать на один вопрос. Тогда «провал» — брак
-разметки, а не поиска, и все метрики систематически занижены.
+Debt 16: every question has one correct label, but several documents in the
+corpus may honestly answer the same question. In that case a "miss" is a labelling
+defect rather than a retrieval one, and every metric is systematically understated.
 
-Здесь мы НЕ чиним разметку, а измеряем масштаб проблемы: по каждому провалу
-спрашиваем судью, содержится ли ответ в том, что поиск реально вернул.
-Дёшево: только провалы, только топ-3, всё кешируется.
+Here we do NOT fix the labels; we measure the scale of the problem: for every miss
+we ask the judge whether the answer is contained in what retrieval actually returned.
+Cheap: misses only, top-3 only, everything cached.
 """
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ VERDICT_RE = re.compile(r"VERDICT:\s*(FULL|PARTIAL|NO)", re.I)
 
 
 def judge_passage(judge, question: str, passage: str) -> str:
-    """Возвращает FULL / PARTIAL / NO."""
+    """Returns FULL / PARTIAL / NO."""
     r = judge.complete(
         [{"role": "user", "content": PROMPT.format(question=question, passage=passage[:2500])}],
         temperature=0.0, max_tokens=120)
@@ -61,7 +61,7 @@ def main() -> None:
     ranked = r.search_batch([g["question"] for g in golden], k=5)
 
     misses = [(g, rk) for g, rk in zip(golden, ranked) if g["gold_chunk_id"] not in rk]
-    print(f"провалов на трудном наборе: {len(misses)} из {len(golden)}\n")
+    print(f"misses on the hard set: {len(misses)} of {len(golden)}\n")
 
     false_misses, true_misses, details = 0, 0, []
     for g, rk in misses:
@@ -73,20 +73,20 @@ def main() -> None:
         answered = [cid for cid, ok in verdicts if ok]
         if answered:
             false_misses += 1
-            mark, note = "ЛОЖНЫЙ", f"отвечает {answered[0].split('#')[0]}"
+            mark, note = "FALSE", f"answered by {answered[0].split('#')[0]}"
         else:
             true_misses += 1
-            mark, note = "настоящий", f"эталон {g['gold_doc_id']}"
+            mark, note = "real", f"gold {g['gold_doc_id']}"
         details.append({"question": g["question"], "gold": g["gold_doc_id"],
                         "false_miss": bool(answered), "answered_by": answered})
         print(f"  [{mark:>9}] {g['question'][:66]:<66} {note}")
 
     n = len(misses)
-    print(f"\n  ложных провалов   {false_misses:>3} из {n}  ({false_misses/n:.0%})")
-    print(f"  настоящих         {true_misses:>3} из {n}")
+    print(f"\n  false misses      {false_misses:>3} of {n}  ({false_misses/n:.0%})")
+    print(f"  real misses       {true_misses:>3} of {n}")
     corrected = (len(golden) - true_misses) / len(golden)
-    print(f"\n  recall@5 по метке          {(len(golden)-n)/len(golden):.3f}")
-    print(f"  recall@5 с учётом аудита   {corrected:.3f}   (+{corrected-(len(golden)-n)/len(golden):.3f})")
+    print(f"\n  recall@5 by label          {(len(golden)-n)/len(golden):.3f}")
+    print(f"  recall@5 after the audit   {corrected:.3f}   (+{corrected-(len(golden)-n)/len(golden):.3f})")
 
     (EVALS / "label_audit.json").write_text(
         json.dumps({"n_misses": n, "false_misses": false_misses,

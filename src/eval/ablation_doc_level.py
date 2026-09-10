@@ -1,16 +1,17 @@
-"""Замер: сколько на самом деле дал бы иерархический поиск.
+"""Measurement: what hierarchical retrieval would actually give.
 
-Зачем. В обсуждении прозвучало, что потолок иерархического поиска — lenient@20
-= 0.980. Это НЕ так: lenient считается по чанкам (документ засчитан, если наверх
-пробился любой его кусок), а иерархия ищет по ОДНОМУ вектору на документ.
-Для тарифной таблицы в тысячи токенов такой вектор усредняет двадцать разных
-разделов и может размазаться. Лучший кусок пробьётся, средний по документу - нет.
+Why. It was claimed in discussion that the ceiling of hierarchical retrieval is
+lenient@20 = 0.980. That is NOT so: lenient is computed over chunks (a document
+counts if any of its pieces broke through), while a hierarchy searches ONE vector
+per document. For a rate table of thousands of tokens such a vector averages twenty
+different sections and may smear out. The best piece breaks through; the document
+average does not.
 
-Здесь мы это проверяем прямо: считаем вектор каждого документа целиком и меряем,
-как часто нужный ДОКУМЕНТ попадает в топ-k. Сравниваем с тем, что даёт нынешний
-поиск по чанкам в мягкой (lenient) постановке - это честная пара.
+Here we test that directly: compute a vector for each whole document and measure how
+often the right DOCUMENT lands in the top-k. Compared against what the current
+chunk-level retrieval gives in its lenient form - that is the fair pair.
 
-Стоимость эксперимента - минуты. Стоимость постройки иерархии - день.
+Cost of the experiment: minutes. Cost of building the hierarchy: a day.
 """
 from __future__ import annotations
 
@@ -35,8 +36,8 @@ def build_doc_index(model):
         texts.append(f"{meta.get('title','')} [{doc_id}]\n\n{body}")
         lens[doc_id] = len(body.split())
 
-    print(f"считаем {len(texts)} векторов документов "
-          f"(самый длинный {max(lens.values()):,} слов)...", flush=True)
+    print(f"computing {len(texts)} document vectors "
+          f"(longest is {max(lens.values()):,} words)...", flush=True)
     vecs = model.encode(texts, batch_size=4, normalize_embeddings=True,
                         show_progress_bar=False, convert_to_numpy=True).astype(np.float32)
     np.save(DOC_EMB, vecs)
@@ -51,7 +52,7 @@ def main() -> None:
     vecs, ids, lens = build_doc_index(model)
     results = {}
 
-    for hard, tag, title in ((False, "easy", "ЛЁГКИЙ"), (True, "hard", "ТРУДНЫЙ")):
+    for hard, tag, title in ((False, "easy", "EASY"), (True, "hard", "HARD")):
         golden = load_golden(hard)
         q = model.encode([g["question"] for g in golden], normalize_embeddings=True,
                          convert_to_numpy=True, batch_size=32).astype(np.float32)
@@ -72,23 +73,23 @@ def main() -> None:
         results[tag] = {"n": n, "recall": {k: rec[k] / n for k in KS}, "mrr": rr / n}
         base = json.loads((EVALS / "baseline_dense.json").read_text(encoding="utf-8"))[tag]
 
-        print(f"\n=== {title}  (вопросов: {n})")
+        print(f"\n=== {title}  (questions: {n})")
         print(f"{'':26}" + "".join(f"@{k:<7}" for k in KS) + "   MRR")
-        print(f"{'поиск по документам':26}" + "".join(f"{rec[k]/n:<8.3f}" for k in KS)
+        print(f"{'document-level search':26}" + "".join(f"{rec[k]/n:<8.3f}" for k in KS)
               + f"  {rr/n:.3f}")
-        print(f"{'по чанкам, мягко (lenient)':26}"
+        print(f"{'chunk-level, lenient':26}"
               + "".join(f"{base['recall_lenient'][str(k)]:<8.3f}" for k in KS))
-        print(f"{'по чанкам, строго (strict)':26}"
+        print(f"{'chunk-level, strict':26}"
               + "".join(f"{base['recall_strict'][str(k)]:<8.3f}" for k in KS)
               + f"  {base['mrr']:.3f}")
         if misses:
-            print(f"\nпровалы@5 ({len(misses)}), длина документа:")
+            print(f"\nmisses@5 ({len(misses)}), document length:")
             for d, w, r in sorted(misses, key=lambda x: -x[1])[:6]:
-                print(f"  {d:<18} {w:>6,} слов   позиция: {r or 'вне топ-20'}")
+                print(f"  {d:<18} {w:>6,} words   rank: {r or 'outside top-20'}")
 
     (EVALS / "ablation_doc_level.json").write_text(
         json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\nзаписано: {EVALS/'ablation_doc_level.json'}")
+    print(f"\nwritten: {EVALS/'ablation_doc_level.json'}")
 
 
 if __name__ == "__main__":

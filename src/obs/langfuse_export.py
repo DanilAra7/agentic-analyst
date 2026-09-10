@@ -1,22 +1,22 @@
-"""Экспорт собственных трасс в Langfuse.
+"""Exporting our own traces to Langfuse.
 
-Почему экспортёр, а не прямая инструментация Langfuse. Числа в README должны
-воспроизводиться у любого, кто склонировал репозиторий, БЕЗ регистрации во
-внешнем сервисе (решение №31). Поэтому источник истины - `evals/traces.jsonl`,
-а Langfuse получает копию. Побочная выгода: экспортировать можно задним числом,
-в том числе трассы, снятые до того, как появился аккаунт.
+Why an exporter rather than instrumenting with Langfuse directly. The numbers in
+the README must reproduce for anyone who clones the repository, WITHOUT signing
+up for an external service (decision #31). So the source of truth is
+`evals/traces.jsonl`, and Langfuse gets a copy. A side benefit: exporting can be
+done after the fact, including traces recorded before the account existed.
 
-Соответствие понятий:
-    наша Trace          -> корневое наблюдение типа agent
-    span kind=llm       -> generation (Langfuse считает по ней токены и стоимость)
+How the concepts map:
+    our Trace           -> a root observation of type agent
+    span kind=llm       -> generation (Langfuse counts tokens and cost from it)
     span kind=tool      -> tool
     span kind=retrieval -> retriever
     span kind=rerank    -> span
-Вложенность восстанавливается из поля `depth`: интервалы лежат плоским списком
-в порядке открытия, так что стек глубин однозначно задаёт дерево.
+Nesting is reconstructed from the `depth` field: spans lie in a flat list in the
+order they were opened, so a stack of depths determines the tree unambiguously.
 
-Времена берутся из трассы, а не из момента экспорта: иначе в Langfuse попадёт
-длительность самого экспорта, а не измеренная.
+Times come from the trace, not from the moment of export: otherwise Langfuse
+would receive the duration of the export itself rather than the measured one.
 """
 from __future__ import annotations
 
@@ -43,28 +43,29 @@ def _client():
     pk, sk = os.getenv("LANGFUSE_PUBLIC_KEY"), os.getenv("LANGFUSE_SECRET_KEY")
     if not (pk and sk):
         raise SystemExit(
-            "Нет LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY в .env.\n"
-            "Ключи заводятся в проекте на cloud.langfuse.com (Settings -> API keys).\n"
-            "Посмотреть, что ушло бы, не отправляя: DRY_RUN=1 make langfuse")
-    # Langfuse разводит регионы разными адресами (eu / us), и SDK читает
-    # LANGFUSE_HOST. В .env переменную часто называют LANGFUSE_BASE_URL -
-    # принимаем оба имени, иначе трассы молча уедут не в тот регион.
+            "LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY are missing from .env.\n"
+            "Keys are created inside a project on cloud.langfuse.com "
+            "(Settings -> API keys).\n"
+            "To see what would be sent without sending it: DRY_RUN=1 make langfuse")
+    # Langfuse separates regions by address (eu / us), and the SDK reads
+    # LANGFUSE_HOST. In .env the variable is often called LANGFUSE_BASE_URL -
+    # we accept both names, otherwise traces silently go to the wrong region.
     c = Langfuse(public_key=pk, secret_key=sk, host=_host())
     if not c.auth_check():
-        raise SystemExit("Langfuse отверг ключи: проверь пару public/secret и host.")
+        raise SystemExit("Langfuse rejected the keys: check the public/secret pair and host.")
     return c
 
 
 def load(path: Path) -> list[dict]:
     if not path.exists():
-        raise SystemExit(f"Нет {path}. Сначала собери трассы: LLM_CACHE=0 make latency")
+        raise SystemExit(f"{path} is missing. Collect traces first: LLM_CACHE=0 make latency")
     with path.open(encoding="utf-8") as f:
         return [json.loads(line) for line in f]
 
 
 def _tree(spans: list[dict]) -> list[tuple[dict, int]]:
-    """(интервал, индекс родителя). Родитель - ближайший предыдущий интервал
-    с меньшей глубиной; -1 означает корень."""
+    """(span, parent index). The parent is the nearest preceding span with a
+    smaller depth; -1 means the root."""
     out, stack = [], []
     for i, sp in enumerate(spans):
         while stack and spans[stack[-1]]["depth"] >= sp["depth"]:
@@ -75,17 +76,18 @@ def _tree(spans: list[dict]) -> list[tuple[dict, int]]:
 
 
 def export_one(client, tr: dict) -> None:
-    """Отправить одну трассу.
+    """Send one trace.
 
-    ОГРАНИЧЕНИЕ, которое надо назвать вслух. В Langfuse v4 наблюдение начинается
-    «сейчас»: `start_observation` не принимает время старта, задать можно только
-    `end_time`. Значит абсолютные метки времени в интерфейсе будут временем
-    ЭКСПОРТА, а не измерения. ДЛИТЕЛЬНОСТИ при этом сохраняются точно - именно
-    они и нужны для разбора. Настоящий момент замера кладём в метаданные, чтобы
-    он не потерялся.
+    A LIMITATION that has to be said out loud. In Langfuse v4 an observation
+    starts "now": `start_observation` does not take a start time, only `end_time`
+    can be set. So the absolute timestamps in the UI are the time of the EXPORT,
+    not of the measurement. DURATIONS are preserved exactly - and those are what
+    the analysis needs. The real moment of measurement goes into the metadata so
+    that it is not lost.
 
-    Порядок закрытия важен: дети закрываются РАНЬШЕ родителей, иначе вложенность
-    в интерфейсе развалится. Поэтому создаём в прямом порядке, закрываем в обратном.
+    Closing order matters: children are closed BEFORE their parents, otherwise
+    the nesting in the UI falls apart. So we create in forward order and close in
+    reverse.
     """
     root = client.start_observation(
         name=f"{tr['scheme']}:{tr['label']}", as_type="agent",
@@ -114,23 +116,23 @@ def export_one(client, tr: dict) -> None:
 
 
 def dry_run(traces: list[dict]) -> None:
-    """Показать, что ушло бы, не отправляя ничего. Нужно, чтобы проверить
-    сборку дерева и разметку типов без аккаунта."""
-    print("DRY RUN: ничего не отправляется\n")
+    """Show what would be sent without sending anything. Needed to check the
+    tree assembly and the type mapping without an account."""
+    print("DRY RUN: nothing is sent\n")
     for tr in traces[:3]:
-        print(f"agent  {tr['scheme']}:{tr['label']}   {tr['total_ms']:.0f} мс")
+        print(f"agent  {tr['scheme']}:{tr['label']}   {tr['total_ms']:.0f} ms")
         for sp, parent in _tree(tr["spans"]):
             pad = "  " * (sp["depth"] + 1)
             t = KIND_TO_TYPE.get(sp["kind"], "span")
-            print(f"{pad}{t:<11}{sp['name']:<14}{sp['ms']:>8.0f} мс"
-                  f"   родитель: {'корень' if parent < 0 else tr['spans'][parent]['name']}")
+            print(f"{pad}{t:<11}{sp['name']:<14}{sp['ms']:>8.0f} ms"
+                  f"   parent: {'root' if parent < 0 else tr['spans'][parent]['name']}")
         print()
     kinds: dict[str, int] = {}
     for tr in traces:
         for sp in tr["spans"]:
             k = KIND_TO_TYPE.get(sp["kind"], "span")
             kinds[k] = kinds.get(k, 0) + 1
-    print(f"всего трасс: {len(traces)}   наблюдений по типам: {kinds}")
+    print(f"traces in total: {len(traces)}   observations by type: {kinds}")
 
 
 def main() -> None:
@@ -144,8 +146,8 @@ def main() -> None:
     for tr in traces:
         export_one(client, tr)
     client.flush()
-    print(f"отправлено трасс: {len(traces)}")
-    print(f"смотреть: {_host()}")
+    print(f"traces sent: {len(traces)}")
+    print(f"view at: {_host()}")
 
 
 if __name__ == "__main__":

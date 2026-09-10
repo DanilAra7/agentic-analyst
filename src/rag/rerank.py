@@ -1,26 +1,28 @@
-"""Реранкер: cross-encoder поверх кандидатов плотного поиска.
+"""Reranker: a cross-encoder on top of dense retrieval candidates.
 
-Зачем. Би-энкодер (bge-m3) кодирует вопрос и чанк НЕЗАВИСИМО, поэтому вектор
-чанка можно посчитать заранее — отсюда скорость. Ценой этого чанк не знает,
-о чём его спросят: один вектор обязан обслуживать все возможные вопросы.
+Why. A bi-encoder (bge-m3) encodes the question and the chunk INDEPENDENTLY, so
+the chunk vector can be computed in advance - hence the speed. The price is that
+the chunk does not know what it will be asked: one vector has to serve every
+possible question.
 
-Cross-encoder читает пару (вопрос, чанк) СОВМЕСТНО, одним проходом трансформера,
-и токены вопроса видят токены чанка через attention. Это точнее, но считать
-заранее нечего: стоимость = K прогонов модели на каждый запрос.
+A cross-encoder reads the pair (question, chunk) JOINTLY, in a single transformer
+pass, and the question's tokens see the chunk's tokens through attention. That is
+more accurate, but there is nothing to precompute: the cost is K model passes per
+query.
 
-Отсюда единственная разумная схема — каскад: дешёвый поиск отбирает K кандидатов,
-дорогой реранкер их переупорядочивает. K — главная ручка размена
-качество/латентность, и именно её мы меряем в ablation.
+Hence the only sensible scheme is a cascade: cheap retrieval selects K candidates,
+the expensive reranker reorders them. K is the main quality/latency trade-off knob,
+and it is exactly what the ablation measures.
 
-О ПАМЯТИ (измерено, а не предположено). Модель — XLM-RoBERTa-large, 568M
-параметров, 2.3 ГБ в float32. Первый прогон держал в памяти ОДНОВРЕМЕННО
-би-энкодер и реранкер в float32 и дорос до 10 ГБ на машине с 16 ГБ: система
-ушла в своп, GPU стал ждать диск, счёт остановился совсем.
-Что помогло: float16 + выгрузка би-энкодера после отбора кандидатов.
-Пик упал 10 ГБ -> 3.6 ГБ.
-Что НЕ помогло: размер батча. Замер 8/16/32/50 на окне 50 дал 2119/2101/2110/2126 мс
-— разброс в пределах шума. GPU упирается в вычисление, а не в накладные расходы
-на запуск, поэтому батч тут не ручка. Оставлен 16 как компромисс.
+ON MEMORY (measured, not assumed). The model is XLM-RoBERTa-large, 568M parameters,
+2.3 GB in float32. The first run held the bi-encoder and the reranker in memory
+SIMULTANEOUSLY in float32 and grew to 10 GB on a 16 GB machine: the system started
+swapping, the GPU waited on disk, and the computation stopped entirely.
+What helped: float16 plus unloading the bi-encoder after candidate selection.
+The peak fell from 10 GB to 3.6 GB.
+What did NOT help: batch size. Measuring 8/16/32/50 at window 50 gave
+2119/2101/2110/2126 ms - a spread within noise. The GPU is compute-bound, not
+launch-overhead-bound, so batch size is not a knob here. 16 was kept as a compromise.
 """
 from __future__ import annotations
 
@@ -32,13 +34,13 @@ import numpy as np
 
 from src.config import settings
 
-BATCH_SIZE = 16      # см. блок «О ПАМЯТИ»: на скорость не влияет
-MAX_LENGTH = 512     # чанки до 400 токенов + вопрос — влезает без обрезки
+BATCH_SIZE = 16      # see the ON MEMORY block: it does not affect speed
+MAX_LENGTH = 512     # chunks up to 400 tokens plus the question: fits without truncation
 
 
 def free_memory() -> None:
-    """Освободить кеш ускорителя. Нужно между этапами каскада: держать
-    би-энкодер в памяти во время реранка незачем, он своё уже отработал."""
+    """Free the accelerator cache. Needed between cascade stages: there is no
+    point holding the bi-encoder in memory during reranking, its work is done."""
     import torch
 
     gc.collect()
@@ -51,7 +53,7 @@ def free_memory() -> None:
 @dataclass
 class Reranked:
     chunk_id: str
-    score: float          # логит cross-encoder, НЕ сравним с косинусом би-энкодера
+    score: float          # cross-encoder logit, NOT comparable to a bi-encoder cosine
     text: str
     meta: dict
 
@@ -74,8 +76,8 @@ class CrossEncoderReranker:
         self.device = str(self.model.model.device)
 
     def score(self, query: str, texts: list[str]) -> np.ndarray:
-        """Сырые логиты релевантности. Монотонного преобразования (sigmoid) не
-        делаем: для ранжирования важен порядок, а он от него не меняется."""
+        """Raw relevance logits. No monotone transform (sigmoid) is applied:
+        ranking depends on order, and a monotone transform does not change it."""
         if not texts:
             return np.empty(0, dtype=np.float32)
         pairs = [(query, t) for t in texts]
@@ -84,7 +86,7 @@ class CrossEncoderReranker:
         return np.asarray(s, dtype=np.float32).ravel()
 
     def rerank(self, query: str, hits: list, top_k: int | None = None) -> list[Reranked]:
-        """hits — объекты с полями chunk_id/text/meta (Hit из retrieve.py)."""
+        """hits - objects with chunk_id/text/meta fields (Hit from retrieve.py)."""
         scores = self.score(query, [h.text for h in hits])
         order = np.argsort(-scores)
         out = [Reranked(hits[i].chunk_id, float(scores[i]), hits[i].text, hits[i].meta)

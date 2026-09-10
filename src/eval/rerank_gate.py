@@ -1,22 +1,23 @@
-"""Условный реранк: не реранжировать, когда плотный поиск и так уверен.
+"""Conditional reranking: skip the reranker when dense search is already confident.
 
-Идея из бэклога №47(г), и она целится сразу в две проблемы, а не в одну.
+The idea comes from backlog #47(d), and it aims at two problems at once, not one.
 
-  ЛАТЕНТНОСТЬ  реранк стоит 2.1 с при окне 20 против 26 мс без него.
-               Если пропускать его там, где он не нужен, средняя цена падает.
-  КАЧЕСТВО     решение №13: реранкер РОНЯЕТ recall@1 (0.765 -> 0.667), потому
-               что предпочитает тематически цельный документ строке таблицы.
-               Пропуская его на уверенных запросах, часть этой потери возвращаем.
+  LATENCY  reranking costs 2.1 s at window 20 against 26 ms without it.
+           Skipping it where it is not needed drops the average price.
+  QUALITY  decision #13: the reranker DROPS recall@1 (0.765 -> 0.667), because it
+           prefers a topically coherent document over a table row. Skipping it on
+           confident queries wins part of that loss back.
 
-Сигнал - РАЗРЫВ УВЕРЕННОСТИ: разница косинуса между первым и вторым кандидатом
-плотного поиска. Большой разрыв означает, что поиск различает лидера; мелкий -
-что кандидаты слиплись и порядок случаен, вот там реранкер и нужен.
+The signal is the CONFIDENCE GAP: the cosine difference between the first and the
+second candidate of dense search. A large gap means search tells the leader apart;
+a small one means the candidates are bunched together and their order is arbitrary
+- that is where the reranker is needed.
 
-Порог НЕ назначается на глаз: перебираем и смотрим, что происходит с обеими
-метриками и с долей реранжированных запросов.
+The threshold is NOT eyeballed: we sweep it and watch what happens to both metrics
+and to the share of reranked queries.
 
-Считается локально. Логиты реранкера считаются ОДИН раз для всех вопросов,
-дальше перебор порогов бесплатен.
+Runs locally. The reranker logits are computed ONCE for all questions, after which
+sweeping thresholds is free.
 """
 from __future__ import annotations
 
@@ -28,7 +29,7 @@ from src.config import EVALS
 from src.eval.retrieval import load_golden
 
 WINDOW = 20
-DENSE_MS, RERANK_MS = 26.0, 2100.0     # замерено в src/eval/rerank_cost.py
+DENSE_MS, RERANK_MS = 26.0, 2100.0     # measured in src/eval/rerank_cost.py
 THRESHOLDS = (0.0, 0.02, 0.04, 0.06, 0.08, 0.10, 0.15, 1.0)
 
 
@@ -39,8 +40,8 @@ def main() -> None:
     golden = load_golden(hard=True)
     r, rr = get_retriever(), get_reranker()
 
-    print(f"считаем один раз: плотный поиск и логиты реранкера для "
-          f"{len(golden)} вопросов...")
+    print(f"computing once: dense search and reranker logits for "
+          f"{len(golden)} questions...")
     rows = []
     for g in golden:
         hits = r.search(g["question"], k=50)
@@ -54,14 +55,14 @@ def main() -> None:
                      "gap": gap})
 
     gaps = sorted(x["gap"] for x in rows)
-    print(f"разрыв уверенности: медиана {gaps[len(gaps)//2]:.3f}, "
-          f"мин {gaps[0]:.3f}, макс {gaps[-1]:.3f}\n")
+    print(f"confidence gap: median {gaps[len(gaps)//2]:.3f}, "
+          f"min {gaps[0]:.3f}, max {gaps[-1]:.3f}\n")
 
     out = []
     for th in THRESHOLDS:
         hit1 = hit5 = n_rr = 0
         for x in rows:
-            use_dense = x["gap"] >= th          # уверен -> не реранжируем
+            use_dense = x["gap"] >= th          # confident -> skip the reranker
             ranked = x["dense"] if use_dense else x["reranked"]
             n_rr += not use_dense
             if x["gold"] in ranked[:1]:
@@ -77,23 +78,23 @@ def main() -> None:
     (EVALS / "rerank_gate.json").write_text(json.dumps(out, ensure_ascii=False, indent=2),
                                             encoding="utf-8")
 
-    print("УСЛОВНЫЙ РЕРАНК: порог по разрыву уверенности")
-    hdr = (f"{'порог':<8}{'реранжируем':>13}{'recall@1':>11}{'recall@5':>11}"
-           f"{'ожид. p50':>12}")
+    print("CONDITIONAL RERANKING: threshold on the confidence gap")
+    hdr = (f"{'thresh':<8}{'reranked':>13}{'recall@1':>11}{'recall@5':>11}"
+           f"{'est. p50':>12}")
     print(hdr); print("-" * len(hdr))
     for x in out:
-        # Правило: реранжируем, когда разрыв МЕНЬШЕ порога. Значит порог 0
-        # означает «никогда», а порог выше максимального разрыва - «всегда».
-        # Первая версия подписала эти строки наоборот.
+        # The rule: rerank when the gap is SMALLER than the threshold. So a
+        # threshold of 0 means "never", and a threshold above the largest gap
+        # means "always". The first version labelled these rows the other way.
         tag = ""
         if x["frac_reranked"] == 0.0:
-            tag = "  реранк никогда"
+            tag = "  never reranks"
         elif x["frac_reranked"] == 1.0:
-            tag = "  реранк всегда"
+            tag = "  always reranks"
         print(f"{x['threshold']:<8.2f}{x['frac_reranked']*100:>12.0f}%"
               f"{x['recall1']:>11.3f}{x['recall5']:>11.3f}"
-              f"{x['p50_est_ms']:>10.0f}м{tag}")
-    print("\nожидаемая p50 = 26 мс плотного поиска + доля реранжированных x 2100 мс")
+              f"{x['p50_est_ms']:>10.0f}ms{tag}")
+    print("\nestimated p50 = 26 ms of dense search + share reranked x 2100 ms")
 
 
 if __name__ == "__main__":

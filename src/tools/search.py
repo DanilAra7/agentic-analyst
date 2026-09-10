@@ -1,20 +1,20 @@
-"""Инструмент поиска по документам: обёртка над лучшей конфигурацией M2.
+"""Document search tool: a wrapper around the best configuration from M2.
 
-Конфигурация не выбирается здесь заново - она измерена и записана в решениях
-№11-13. Кратко, почему именно такая:
+The configuration is not chosen anew here - it was measured and recorded in
+decisions #11-13. Briefly, why it looks like this:
 
-  плотный поиск (bge-m3) достаёт CANDIDATES кандидатов
-    -> cross-encoder переупорядочивает первые RERANK_WINDOW
-      -> наверх идут TOP_K
+  dense search (bge-m3) pulls CANDIDATES candidates
+    -> a cross-encoder reorders the first RERANK_WINDOW of them
+      -> TOP_K go upstream
 
-Реранкер ВКЛЮЧЁН, потому что потребитель выдачи - агент, который читает
-несколько документов сразу: для него важен recall@5 (0.863 -> 0.941), а не
-recall@1. Если бы мы показывали пользователю один готовый ответ, реранкер надо
-было бы ВЫКЛЮЧИТЬ: он роняет recall@1 с 0.765 до 0.667. Единственной лучшей
-конфигурации не существует, и этот файл - место, где сделан выбор под задачу.
+The reranker is ON, because the consumer of the output is an agent that reads
+several documents at once: what matters for it is recall@5 (0.863 -> 0.941), not
+recall@1. If we were showing a user one finished answer, the reranker would have
+to be OFF: it drops recall@1 from 0.765 to 0.667. There is no single best
+configuration, and this file is where the choice is made for this task.
 
-Окно 20, а не 50: переход к 50 покупает +0.020 recall за +2.1 секунды. Колено
-кривой на 20.
+Window 20, not 50: going to 50 buys +0.020 recall for +2.1 seconds. The knee of
+the curve is at 20.
 """
 from __future__ import annotations
 
@@ -23,23 +23,24 @@ from functools import lru_cache
 
 from src.obs import trace as obs
 
-CANDIDATES = 50        # сколько достаёт плотный поиск
-RERANK_WINDOW = 20     # сколько из них переупорядочивает cross-encoder
-TOP_K = 5              # сколько уходит в контекст модели
-SNIPPET_CHARS = 1800   # обрезка текста куска: размен контекста на полноту
-# Было 700 и это ломало ответы: обрезка приходилась на середину таблицы окон
-# возврата по категориям, и строки telephony, auto, musical_instruments модель
-# не видела вовсе. Она отвечала честно по тому, что ей дали, и промахивалась.
-# 1800 покрывает самый длинный чанк (400 токенов). Это ручка размена
-# «токены против полноты», её стоит померить отдельно - бэклог №34.
+CANDIDATES = 50        # how many dense search pulls
+RERANK_WINDOW = 20     # how many of them the cross-encoder reorders
+TOP_K = 5              # how many go into the model context
+SNIPPET_CHARS = 1800   # chunk text cutoff: context traded against completeness
+# It used to be 700 and that broke answers: the cutoff landed in the middle of
+# the per-category return window table, and the model never saw the telephony,
+# auto and musical_instruments rows at all. It answered honestly from what it was
+# given, and got it wrong. 1800 covers the longest chunk (400 tokens). This is a
+# "tokens against completeness" knob and deserves its own measurement - backlog #34.
 
 
-# Поля, по которым определяется, какой документ формально главнее. Они лежали
-# в шапке документа с самого M1 и никогда не доходили до модели: в текст чанка
-# дописывался только title. Из-за этого агент, получив правило «предпочитай
-# документ с версией и цепочкой отмены», честно ответил «ни у одного из них
-# версии нет» - хотя у настоящего регламента version 1.4, а у подложного ничего.
-# Правило без доказательств не работает. Решение №27.
+# The fields that decide which document is formally the more authoritative one.
+# They had been in the document header since M1 and never reached the model: only
+# the title was prepended to the chunk text. Because of that the agent, given the
+# rule "prefer the document with a version and a supersedes chain", honestly
+# answered "neither of them has a version" - although the real policy has
+# version 1.4 and the planted one has nothing. A rule without evidence does not
+# work. Decision #27.
 AUTHORITY = ("version", "effective_from", "status", "supersedes")
 
 
@@ -68,9 +69,9 @@ class DocSearchTool:
         return get_reranker()
 
     def search(self, query: str, top_k: int = TOP_K) -> list[Passage]:
-        # Два этапа меряются РАЗДЕЛЬНО: плотный поиск - миллисекунды,
-        # cross-encoder - секунды. Общая цифра «поиск занял 2.5 с» правдива
-        # и бесполезна: непонятно, что резать.
+        # The two stages are measured SEPARATELY: dense search takes
+        # milliseconds, the cross-encoder takes seconds. A single "search took
+        # 2.5 s" is true and useless: it does not say what to cut.
         with obs.span("dense", "retrieval", k=CANDIDATES):
             hits = self._retriever.search(query, k=CANDIDATES if self.use_reranker else top_k)
         if self.use_reranker:
@@ -87,11 +88,11 @@ class DocSearchTool:
                 for h, s in picked]
 
     def as_text(self, query: str, top_k: int = TOP_K) -> str:
-        """Как результат выглядит для модели.
+        """What the result looks like to the model.
 
-        Каждый фрагмент подписан идентификатором документа: без этого модель
-        не сможет сослаться на источник, а ответ без ссылки на источник в
-        справочной системе бесполезен - его нечем проверить.
+        Every passage is labelled with its document id: without it the model
+        cannot cite a source, and in a reference system an answer with no source
+        is useless - there is no way to check it.
         """
         ps = self.search(query, top_k)
         if not ps:

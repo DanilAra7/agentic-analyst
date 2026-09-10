@@ -1,29 +1,30 @@
-"""Роутер: бейзлайн для агента. Ровно ОДИН заход в инструменты.
+"""Router: the baseline for the agent. Exactly ONE trip to the tools.
 
-Зачем он существует (решение №18). Если роутера достаточно, то агент строится
-ради агента, и узнать это надо ДО недели работы над циклом. Роутер - это
-проверка посылки проекта, а не разминка.
+Why it exists (decision #18). If the router is enough, then the agent is being
+built for its own sake, and that has to be found out BEFORE a week of work on the
+loop. The router is a test of the project's premise, not a warm-up.
 
-Отличие от агента ровно одно: РОВНО ОДИН РАУНД вызовов инструментов. Системный
-промпт, набор инструментов и разбор ответа - те же самые, иначе сравнение мерило
-бы их разницу.
+Exactly one thing separates it from the agent: EXACTLY ONE ROUND of tool calls.
+The system prompt, the tool set and response parsing are identical, otherwise the
+comparison would measure their difference instead.
 
-Важное уточнение, найденное на первом же прогоне. «Один раунд» не значит «один
-инструмент»: модель вправе вызвать оба сразу, параллельно, и она так делает.
-Значит роутер отличается от агента не числом инструментов, а невозможностью
-СЦЕПЛЕНИЯ: второй вызов не может зависеть от результата первого.
-Именно сцепление и есть то, что покупается агентностью, и именно его мы меряем.
+An important clarification, found on the very first run. "One round" does not mean
+"one tool": the model is free to call both at once, in parallel, and it does.
+So the router differs from the agent not in the number of tools but in the
+impossibility of CHAINING: the second call cannot depend on the first one's
+result. Chaining is exactly what agency buys, and chaining is what we measure.
 
-Второе наблюдение оттуда же: получив результат документа, модель пытается
-вызвать SQL даже когда инструменты ей не передали - возвращает пустой content и
-tool_calls. Это структурный предел роутера в чистом виде, и мы его считаем
-отдельной величиной `needed_second_hop`: доля вопросов, где одного раунда не
-хватило. Она измеряет потребность в агентности НАПРЯМУЮ, не через качество ответа.
+A second observation from the same run: having received a document result, the
+model tries to call SQL even when no tools were passed to it - returning empty
+content and empty tool_calls. That is the router's structural limit in pure form,
+and we count it as a separate quantity, `needed_second_hop`: the share of
+questions where one round was not enough. It measures the need for agency
+DIRECTLY, not through answer quality.
 
-Ожидание, назначенное заранее:
-  sql / docs   роутер должен справляться наравне с агентом
-  both         роутер должен ПРОВАЛИТЬСЯ: одного захода не хватает
-  none         должен отказаться
+The expectation, fixed in advance:
+  sql / docs   the router should do as well as the agent
+  both         the router should FAIL: one trip is not enough
+  none         should refuse
 """
 from __future__ import annotations
 
@@ -44,8 +45,8 @@ def answer(llm, question: str) -> Trace:
         return tr
 
     messages.append(assistant_msg(r))
-    for call in r.tool_calls:                 # роутер выполняет то, что запросили за один раз
-        if call.name == "final_answer":       # ответил, не заглядывая в источники
+    for call in r.tool_calls:                 # the router executes what was asked for in one go
+        if call.name == "final_answer":       # answered without looking at any source
             tr.take_final(call.arguments)
             tr.stop_reason = "final_answer"
             return tr
@@ -54,12 +55,13 @@ def answer(llm, question: str) -> Trace:
         messages.append({"role": "tool", "tool_call_id": call.id,
                          "name": call.name, "content": out})
 
-    # Второй раунд запрещён: инструменты не передаём.
+    # A second round is forbidden: we pass no tools.
     messages.append({"role": "user", "content":
                      "Now answer the original question using only what you already have. "
                      "If it is not enough, say plainly what is missing."})
-    # Второй раунд ДОБЫЧИ запрещён, но выйти надо тем же типизированным
-    # действием, что и у агента: иначе схемы отличались бы ещё и формой ответа.
+    # A second round of FETCHING is forbidden, but the exit must use the same
+    # typed action as the agent: otherwise the schemes would also differ in the
+    # shape of their answer.
     r2 = run_step(llm, messages, tools=[FINAL_SPEC], tr=tr)
 
     for call in r2.tool_calls:
@@ -73,9 +75,9 @@ def answer(llm, question: str) -> Trace:
         tr.stop_reason = "answered_after_one_hop"
         return tr
 
-    # Пустой ответ с попыткой вызвать инструмент = одного раунда не хватило.
-    # Даём последний шанс сказать это словами: иначе провал был бы засчитан
-    # за немоту реализации, а не за предел схемы.
+    # An empty reply with an attempted tool call = one round was not enough.
+    # Give a last chance to say so in words: otherwise the failure would be
+    # scored as muteness of the implementation rather than a limit of the scheme.
     tr.stop_reason = "needed_second_hop"
     messages.append({"role": "user", "content":
                      "You have no tools left and cannot call any. Answer in plain text: "
@@ -102,8 +104,8 @@ def main() -> None:
         tr = answer(llm, q)
         print("=" * 78)
         print("Q:", q)
-        print(f"инструменты: {tr.tools_used or '—'}   вызовов LLM: {tr.llm_calls}   "
-              f"{tr.ms:.0f} мс   стоп: {tr.stop_reason}")
+        print(f"tools: {tr.tools_used or '-'}   llm calls: {tr.llm_calls}   "
+              f"{tr.ms:.0f} ms   stop: {tr.stop_reason}")
         print("A:", (tr.answer or "").strip()[:400])
 
 

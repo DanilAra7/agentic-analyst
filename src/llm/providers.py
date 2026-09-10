@@ -1,7 +1,7 @@
-"""Провайдеры LLM.
+"""LLM providers.
 
-Groq, Mistral и Gemini отдают OpenAI-совместимый /chat/completions, поэтому
-одного клиента хватает на всех троих. Меняется только базовый URL и ключ.
+Groq, Mistral and Gemini all expose an OpenAI-compatible /chat/completions, so a
+single client covers all three. Only the base URL and the key change.
 """
 from __future__ import annotations
 
@@ -25,8 +25,9 @@ ENDPOINTS = {
     ),
 }
 
-# Цена за 1 млн токенов (input, output). Заполняется вручную под свой тариф;
-# на free tier это нули, но поле нужно, чтобы ablation считала стоимость.
+# Price per 1M tokens (input, output). Filled in by hand for your own plan;
+# on a free tier these are zeros, but the field is needed so the ablation can
+# compute cost.
 PRICES: dict[str, tuple[float, float]] = {}
 
 RETRY_STATUS = {408, 429, 500, 502, 503, 504}
@@ -37,11 +38,11 @@ _CACHE_READ = os.getenv("LLM_CACHE", "1") != "0"
 class OpenAICompatProvider:
     def __init__(self, provider: str, model: str, timeout: float = 45.0):
         if provider not in ENDPOINTS:
-            raise ValueError(f"Неизвестный провайдер {provider!r}. Доступны: {list(ENDPOINTS)}")
+            raise ValueError(f"Unknown provider {provider!r}. Available: {list(ENDPOINTS)}")
         base_url, env_key = ENDPOINTS[provider]
         api_key = os.getenv(env_key)
         if not api_key:
-            raise RuntimeError(f"Не задан {env_key} в .env")
+            raise RuntimeError(f"{env_key} is not set in .env")
         self.name = provider
         self.model = model
         self._client = httpx.Client(
@@ -60,10 +61,10 @@ class OpenAICompatProvider:
         params = {"temperature": temperature, "max_tokens": max_tokens, "tools": tools}
         key = make_key(self.name, self.model, messages, **params)
 
-        # Чтение кеша можно выключить (LLM_CACHE=0). Это нужно ровно для двух
-        # вещей, которые с кешем измерить НЕВОЗМОЖНО: разброса между прогонами
-        # и честной латентности. Запись при этом продолжается: следующий
-        # обычный прогон снова будет бесплатным.
+        # Cache reads can be turned off (LLM_CACHE=0). This is needed for exactly
+        # two things that are IMPOSSIBLE to measure with the cache on: the spread
+        # between runs, and honest latency. Writing continues regardless, so the
+        # next normal run is free again.
         if _CACHE_READ and (hit := _CACHE.get(key)) is not None:
             return self._parse(hit, latency_ms=0.0, cached=True)
 
@@ -85,27 +86,27 @@ class OpenAICompatProvider:
         return self._parse(data, latency_ms=latency_ms, cached=False)
 
     def _post_with_retry(self, path: str, body: dict, max_attempts: int = 6) -> dict:
-        """Экспоненциальный backoff с джиттером. На free tier 429 это норма,
-        а не ошибка, поэтому ретраи обязательны."""
+        """Exponential backoff with jitter. On a free tier a 429 is normal rather
+        than an error, so retries are mandatory."""
         last_error: Exception | None = None
         for attempt in range(max_attempts):
             try:
                 resp = self._client.post(path, json=body)
                 if resp.status_code in RETRY_STATUS:
                     wait = self._retry_after(resp) or (2**attempt + random.random())
-                    print(f"    [{self.name}] {resp.status_code}, попытка "
-                          f"{attempt+1}/{max_attempts}, пауза {min(wait,60):.0f}s", flush=True)
+                    print(f"    [{self.name}] {resp.status_code}, attempt "
+                          f"{attempt+1}/{max_attempts}, waiting {min(wait,60):.0f}s", flush=True)
                     time.sleep(min(wait, 60))
                     continue
                 resp.raise_for_status()
                 return resp.json()
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last_error = exc
-                print(f"    [{self.name}] {type(exc).__name__}, попытка "
+                print(f"    [{self.name}] {type(exc).__name__}, attempt "
                       f"{attempt+1}/{max_attempts}", flush=True)
                 time.sleep(min(2**attempt + random.random(), 60))
         raise RuntimeError(
-            f"{self.name}: не удалось выполнить запрос за {max_attempts} попыток"
+            f"{self.name}: request failed after {max_attempts} attempts"
         ) from last_error
 
     @staticmethod
@@ -128,8 +129,8 @@ class OpenAICompatProvider:
             try:
                 args = json.loads(raw_args)
             except json.JSONDecodeError:
-                # Модель вернула невалидный JSON. Это штатная ситуация,
-                # обрабатывается на уровне агента, а не падением здесь.
+                # The model returned invalid JSON. This is a normal situation,
+                # handled at the agent level rather than by crashing here.
                 args = {"__malformed__": raw_args}
             calls.append(ToolCall(id=tc.get("id", ""), name=fn.get("name", ""),
                                   arguments=args,

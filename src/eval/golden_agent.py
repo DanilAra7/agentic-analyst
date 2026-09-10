@@ -1,24 +1,26 @@
-"""Golden set для агента: четыре типа вопросов.
+"""Golden set for the agent: four kinds of question.
 
-Зачем четыре типа, а не один общий набор. Роутер (один вызов: выбрать инструмент
-и выполнить) и агент (цикл) отличаются РОВНО на двухисточниковых вопросах:
-роутер физически делает один заход в один инструмент. Если не разделить типы,
-разница усреднится и станет невидимой - ровно та ошибка, которую мы уже ловили
-в M2 с реранкером.
+Why four kinds rather than one common set. The router (one call: pick a tool and
+run it) and the agent (a loop) differ EXACTLY on the two-source questions: the
+router physically makes one trip to one tool. Without separating the kinds, the
+difference is averaged away and becomes invisible - precisely the mistake we
+already caught in M2 with the reranker.
 
-  sql    отвечается только числами из базы
-  docs   отвечается только текстом регламентов
-  both   требует ОБА источника: факт из документа + вычисление по базе
-  none   не отвечается вовсе, верное поведение - отказ
+  sql    answerable only from numbers in the database
+  docs   answerable only from the text of the policies
+  both   requires BOTH sources: a fact from a document + a computation over the
+         database
+  none   not answerable at all, the correct behaviour is a refusal
 
-Проверка настоящности `both`: может ли человек ответить, имея только один
-инструмент? Если да - вопрос бракованный. Каждый both-вопрос ниже устроен так,
-что число из документа (порог, окно, список категорий) невозможно получить из
-базы, а счёт по базе невозможно получить из документа.
+The test for a genuine `both`: could a person answer having only one tool? If yes,
+the question is defective. Every both-question below is built so that the number
+from the document (a threshold, a window, a list of categories) cannot be obtained
+from the database, and the count from the database cannot be obtained from the
+document.
 
-`needs_tools` размечен РУКАМИ. Это эталон для метрики «выбрал ли агент верный
-инструмент» - единственной, которая не зависит от того, врёт судья или нет
-(решение №19).
+`needs_tools` is labelled BY HAND. It is the reference for the "did the agent pick
+the right tool" metric - the only one that does not depend on whether the judge
+lies (decision #19).
 """
 from __future__ import annotations
 
@@ -37,15 +39,15 @@ class AgentQuestion:
     kind: str                    # sql | docs | both | none
     question: str
     needs_tools: list[str]
-    expected_value: float | None = None   # если ответ - число, сверяем точно
-    expected_facts: list[str] = field(default_factory=list)  # что обязано быть в ответе
-    reference_sql: str = ""      # чем считалось число, для разбора провалов
-    doc_fact: str = ""           # какой факт берётся из документа
+    expected_value: float | None = None   # if the answer is a number, matched exactly
+    expected_facts: list[str] = field(default_factory=list)  # what must appear in the answer
+    reference_sql: str = ""      # how the number was computed, for debugging failures
+    doc_fact: str = ""           # which fact is taken from the document
     note: str = ""
 
 
 Q = [
-    # ---------------- только SQL ----------------
+    # ---------------- SQL only ----------------
     AgentQuestion("sq1", "sql", "How many orders have the status 'delivered'?", [SQL],
                   96478, reference_sql="SELECT COUNT(*) FROM order_summary WHERE order_status='delivered'"),
     AgentQuestion("sq2", "sql", "Which customer state has the most orders?", [SQL],
@@ -63,7 +65,7 @@ Q = [
                   15843553.24,
                   reference_sql="SELECT SUM(price+freight_value) FROM order_facts"),
 
-    # ---------------- только документы ----------------
+    # ---------------- documents only ----------------
     AgentQuestion("dq1", "docs", "What is the voluntary return window under the current returns policy?",
                   [DOCS], expected_facts=["14"],
                   doc_fact="POL-RET-002 section 2: 14 calendar days"),
@@ -79,73 +81,77 @@ Q = [
     AgentQuestion("dq5", "docs", "Does the current policy charge a restocking fee "
                                  "on defect-related returns?", [DOCS],
                   expected_facts=["no"], doc_fact="POL-RET-002 section 3: abolished for defect returns",
-                  note="ловушка: отменённая версия v1 берёт 15%, действующая - нет"),
+                  note="a trap: the superseded v1 charges 15%, the current one does not"),
     AgentQuestion("dq6", "docs", "Is Saturday counted as a business day for parcels "
                                  "handled through the Roraima hub?", [DOCS],
                   expected_facts=["not"], doc_fact="OPS-RR-001 section 2: Saturday is NOT a business day"),
 
-    # ---------------- оба источника ----------------
+    # ---------------- both sources ----------------
     AgentQuestion("bq1", "both",
                   "Under the delivery delay compensation policy, how many orders qualify "
                   "for the highest compensation tier?", [SQL, DOCS], 1384,
                   reference_sql="SELECT COUNT(*) FROM order_summary WHERE delivery_delay_days>=15",
-                  doc_fact="порог высшего тарифа = 15 дней и более",
-                  note="порог 15 невозможно узнать из базы, счёт невозможно узнать из документа"),
+                  doc_fact="the highest tier threshold = 15 days or more",
+                  note="the threshold 15 cannot come from the database, the count cannot come "
+                       "from the document"),
     AgentQuestion("bq2", "both",
                   "How much freight would we refund in total for orders that fall into the "
                   "lowest delay compensation tier?", [SQL, DOCS], 44098.66,
                   reference_sql="SELECT SUM(freight_total) FROM order_summary "
                                 "WHERE delivery_delay_days BETWEEN 1 AND 3",
-                  doc_fact="нижний тариф = опоздание 1-3 дня, возвращается фрахт целиком"),
+                  doc_fact="lowest tier = 1-3 days late, freight refunded in full"),
     AgentQuestion("bq3", "both",
                   "Among the three categories with the highest revenue, which one has the "
                   "shortest return window?", [SQL, DOCS], expected_facts=["watches_gifts", "7"],
                   reference_sql="SELECT category FROM order_facts WHERE category IS NOT NULL "
                                 "GROUP BY 1 ORDER BY SUM(price) DESC LIMIT 3",
-                  doc_fact="окна возврата: health_beauty 14, watches_gifts 7, bed_bath_table 14"),
+                  doc_fact="return windows: health_beauty 14, watches_gifts 7, bed_bath_table 14"),
     AgentQuestion("bq4", "both",
                   "For the state with the most orders, what is the designated sorting hub?",
                   [SQL, DOCS], expected_facts=["São Paulo"],
                   reference_sql="SELECT customer_state FROM order_summary GROUP BY 1 "
                                 "ORDER BY COUNT(*) DESC LIMIT 1",
-                  doc_fact="OPS-SP-001: хаб для SP - São Paulo"),
+                  doc_fact="OPS-SP-001: the hub for SP is São Paulo"),
     AgentQuestion("bq5", "both",
                   "How many distinct orders contain items from categories that require "
                   "prior authorisation for returns?", [SQL, DOCS], 7073,
                   reference_sql="SELECT COUNT(DISTINCT order_id) FROM order_facts WHERE category "
                                 "IN ('auto','electronics','musical_instruments')",
-                  doc_fact="список категорий с предварительной авторизацией"),
+                  doc_fact="the list of categories requiring prior authorisation"),
     AgentQuestion("bq6", "both",
                   "The state with the worst average review score: is Saturday counted as a "
                   "business day for its hub?", [SQL, DOCS], expected_facts=["not"],
                   reference_sql="SELECT customer_state FROM order_summary WHERE review_score "
                                 "IS NOT NULL GROUP BY 1 ORDER BY AVG(review_score) LIMIT 1",
-                  doc_fact="худший штат RR; OPS-RR-001: суббота НЕ рабочий день"),
+                  doc_fact="the worst state is RR; OPS-RR-001: Saturday is NOT a business day"),
     AgentQuestion("bq7", "both",
                   "Among the five categories with the most items sold, which has the "
                   "shortest return window?", [SQL, DOCS], expected_facts=["sports_leisure", "7"],
                   reference_sql="SELECT category FROM order_facts WHERE category IS NOT NULL "
                                 "GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 5",
-                  doc_fact="sports_leisure = 7 дней, остальные из топ-5 = 14"),
+                  doc_fact="sports_leisure = 7 days, the rest of the top 5 = 14"),
     AgentQuestion("bq8", "both",
                   "Which of the top five categories by items sold has a hygiene seal "
                   "requirement on returns?", [SQL, DOCS], expected_facts=["health_beauty"],
                   reference_sql="SELECT category FROM order_facts WHERE category IS NOT NULL "
                                 "GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 5",
-                  doc_fact="hygiene seal = Yes только у health_beauty, baby, perfumery"),
+                  doc_fact="hygiene seal = Yes only for health_beauty, baby, perfumery"),
 
-    # ---------------- не отвечается ----------------
+    # ---------------- not answerable ----------------
     AgentQuestion("nq1", "none", "How many unique customers placed at least one order?", [],
-                  note="customer_id уникален на заказ, настоящий customer_unique_id отсутствует. "
-                       "Любой ответ равен числу заказов и неверен"),
+                  note="customer_id is unique per order, the real customer_unique_id is absent. "
+                       "Any answer equals the order count and is wrong"),
     AgentQuestion("nq2", "none", "How many orders were paid by credit card?", [],
-                  note="таблица оплат намеренно не выведена в витрины (решение №16, бэклог №28). "
-                       "Наше собственное ограничение делает вопрос неотвечаемым"),
+                  note="the payments table is deliberately not exposed in the marts "
+                       "(decision #16, backlog #28). Our own restriction makes the question "
+                       "unanswerable"),
     AgentQuestion("nq3", "none", "What is the average delivery time to Portugal?", [],
-                  note="данные только по Бразилии, международной доставки нет ни в базе, ни в регламентах"),
+                  note="the data covers Brazil only; international shipping is in neither the "
+                       "database nor the policies"),
     AgentQuestion("nq4", "none", "What is the contact email of the seller with the highest revenue?", [],
-                  note="продавца посчитать можно, контактов нет нигде. Частично отвечаемый вопрос: "
-                       "верное поведение - назвать продавца и сказать, что контактов нет"),
+                  note="the seller can be computed, the contact details exist nowhere. A partly "
+                       "answerable question: the correct behaviour is to name the seller and say "
+                       "the contact details are missing"),
 ]
 
 
@@ -159,7 +165,7 @@ def build() -> None:
             if not r.ok:
                 bad.append((q.id, r.error))
     if bad:
-        print("ЭТАЛОННЫЕ ЗАПРОСЫ НЕ ВЫПОЛНИЛИСЬ:")
+        print("REFERENCE QUERIES FAILED TO RUN:")
         for i, e in bad:
             print(f"  {i}: {e}")
         raise SystemExit(1)
@@ -170,14 +176,14 @@ def build() -> None:
 
     from collections import Counter
     c = Counter(q.kind for q in Q)
-    print(f"вопросов: {len(Q)}   " + "  ".join(f"{k}={v}" for k, v in sorted(c.items())))
+    print(f"questions: {len(Q)}   " + "  ".join(f"{k}={v}" for k, v in sorted(c.items())))
     print(f"{GOLDEN_AGENT_PATH}\n")
-    print(f"{'id':<5}{'тип':<6}{'инструменты':<22}{'вопрос':<64}эталон")
+    print(f"{'id':<5}{'kind':<6}{'tools':<22}{'question':<64}reference")
     print("-" * 132)
     for q in Q:
-        tools = ", ".join(t.replace("_query", "").replace("search_", "") for t in q.needs_tools) or "—"
+        tools = ", ".join(t.replace("_query", "").replace("search_", "") for t in q.needs_tools) or "-"
         exp = (f"{q.expected_value:,.2f}" if q.expected_value is not None
-               else ", ".join(q.expected_facts) or "отказ")
+               else ", ".join(q.expected_facts) or "refusal")
         print(f"{q.id:<5}{q.kind:<6}{tools:<22}{q.question[:62]:<64}{exp[:30]}")
 
 

@@ -1,13 +1,14 @@
-"""Прогон схемы (роутер или агент) по набору из 24 вопросов.
+"""Running one scheme (router or agent) over the set of 24 questions.
 
-Разбивка по типам вопросов обязательна, а не желательна: роутер и агент
-отличаются РОВНО на двухисточниковых. Общая точность усреднит эту разницу и
-скроет её - та же ошибка, что мы уже ловили в M2 с реранкером.
+Breaking the numbers down by question type is mandatory, not nice to have: the
+router and the agent differ EXACTLY on the two-source questions. Overall accuracy
+would average that difference away and hide it - the same mistake we already
+caught in M2 with the reranker.
 
-Критерий назначен заранее, решение №18:
-  sql / docs   роутер должен идти наравне с агентом
-  both         роутер должен провалиться
-  none         обе схемы должны отказаться
+The criterion was fixed in advance, decision #18:
+  sql / docs   the router should keep up with the agent
+  both         the router should fail
+  none         both schemes should refuse
 """
 from __future__ import annotations
 
@@ -35,13 +36,14 @@ def run_scheme(name: str, answer_fn, llm, golden: list[dict]) -> dict:
         try:
             tr = answer_fn(llm, q["question"])
         except Exception as e:                       # noqa: BLE001
-            print(f"  {i:>2}/{len(golden)} {q['id']} СБОЙ: {type(e).__name__}: {e}", flush=True)
+            print(f"  {i:>2}/{len(golden)} {q['id']} CRASH: {type(e).__name__}: {e}", flush=True)
             continue
         g = grade(q, tr)
-        # Сохраняем ТРАССУ, а не только исход. Повод конкретный: вопрос bq5 в
-        # одном прогоне из трёх дал 6 449 вместо 7 073, и восстановить, каким
-        # запросом получено это число, оказалось невозможно - в файле лежали
-        # только метрики. Разбор провала требует шагов с аргументами.
+        # We store the TRACE, not just the outcome. The reason is concrete:
+        # question bq5 in one run out of three returned 6,449 instead of 7,073,
+        # and reconstructing which query produced that number turned out to be
+        # impossible - the file held only metrics. Debugging a failure needs the
+        # steps together with their arguments.
         rows.append({"id": q["id"], "kind": q["kind"], "question": q["question"],
                      "answer": tr.answer,
                      "trace": [{"tool": st.tool, "args": st.arguments,
@@ -49,8 +51,8 @@ def run_scheme(name: str, answer_fn, llm, golden: list[dict]) -> dict:
                      **g})
         mark = "+" if g["correct"] else "."
         print(f"  {i:>2}/{len(golden)} {q['id']:<4} {q['kind']:<5} {mark} "
-              f"{','.join(g['tools_used']) or '—':<24}"
-              f"{'инстр.верно' if g['tools_ok'] else 'ИНСТР.МИМО':<13}"
+              f"{','.join(g['tools_used']) or '-':<24}"
+              f"{'tools ok' if g['tools_ok'] else 'TOOLS WRONG':<13}"
               f"{g['stop_reason']:<21}{time.perf_counter()-t0:>5.1f}s", flush=True)
     return {"scheme": name, "rows": rows}
 
@@ -62,8 +64,8 @@ def report(res: dict) -> None:
         by[r["kind"]].append(r)
 
     print(f"\n=== {res['scheme'].upper()} ===")
-    hdr = (f"{'тип':<7}{'n':>3}{'верно':>8}{'инструм.':>10}{'шагов':>8}"
-           f"{'вызовов':>9}{'токенов':>10}{'2-й раунд':>11}")
+    hdr = (f"{'kind':<7}{'n':>3}{'correct':>8}{'tools':>10}{'steps':>8}"
+           f"{'calls':>9}{'tokens':>10}{'2nd hop':>11}")
     print(hdr); print("-" * len(hdr))
 
     def line(label, g):
@@ -79,27 +81,28 @@ def report(res: dict) -> None:
         if by.get(k):
             line(k, by[k])
     print("-" * len(hdr))
-    line("ВСЕГО", rows)
+    line("TOTAL", rows)
 
     bad = [r for r in rows if not r["correct"]]
-    print(f"\nпровалы ({len(bad)}):")
+    print(f"\nfailures ({len(bad)}):")
     for r in bad:
         print(f"  [{r['id']} {r['kind']}] {r['question'][:64]}")
-        print(f"      инстр={','.join(r['tools_used']) or '—'}   {r['stop_reason']}")
-        print(f"      ответ: {(r['answer'] or '').strip()[:150]}")
+        print(f"      tools={','.join(r['tools_used']) or '-'}   {r['stop_reason']}")
+        print(f"      answer: {(r['answer'] or '').strip()[:150]}")
 
 
 def summarise(runs: list[dict]) -> None:
-    """Среднее и РАЗМАХ по нескольким прогонам.
+    """Mean and SPREAD across several runs.
 
-    Один прогон - не измерение (бэклог №37): два прогона агента до этого дали
-    0.88 и 1.00 на двухисточниковых, разница в один вопрос равна 0.125 при n=8.
-    Без размаха любое сравнение конфигураций рискует обсуждать шум.
-    Прогоны обязаны идти с LLM_CACHE=0, иначе повторы вернут тот же ответ и
-    размах окажется нулевым по построению.
+    One run is not a measurement (backlog #37): two earlier agent runs gave 0.88
+    and 1.00 on the two-source questions, and a difference of one question equals
+    0.125 at n=8. Without the spread, any comparison of configurations risks
+    discussing noise.
+    The runs must go with LLM_CACHE=0, otherwise repeats return the same answer
+    and the spread is zero by construction.
     """
-    print(f"\n=== {len(runs)} ПРОГОНА: среднее и размах ===")
-    hdr = f"{'тип':<7}{'n':>3}{'верно':>22}{'шагов':>16}{'токенов':>18}"
+    print(f"\n=== {len(runs)} RUNS: mean and spread ===")
+    hdr = f"{'kind':<7}{'n':>3}{'correct':>22}{'steps':>16}{'tokens':>18}"
     print(hdr); print("-" * len(hdr))
 
     def cell(vals, fmt="{:.2f}"):
@@ -108,10 +111,10 @@ def summarise(runs: list[dict]) -> None:
         span = "" if lo == hi else f" [{fmt.format(lo)}-{fmt.format(hi)}]"
         return fmt.format(mid) + span
 
-    for k in KINDS + ("ВСЕГО",):
+    for k in KINDS + ("TOTAL",):
         per = []
         for r in runs:
-            rows = r["rows"] if k == "ВСЕГО" else [x for x in r["rows"] if x["kind"] == k]
+            rows = r["rows"] if k == "TOTAL" else [x for x in r["rows"] if x["kind"] == k]
             if rows:
                 per.append(rows)
         if not per:
@@ -122,11 +125,11 @@ def summarise(runs: list[dict]) -> None:
               f"{cell([sum(x['steps'] for x in g)/len(g) for g in per], '{:.1f}'):>16}"
               f"{cell([sum(x['tokens'] for x in g)/len(g) for g in per], '{:.0f}'):>18}")
 
-    # какие вопросы вели себя нестабильно - это интереснее среднего
+    # which questions behaved unstably - more interesting than the mean
     ids = {x["id"] for x in runs[0]["rows"]}
     flaky = [i for i in sorted(ids)
              if len({tuple(x["correct"] for x in r["rows"] if x["id"] == i) for r in runs}) > 1]
-    print(f"\nнестабильные вопросы: {', '.join(flaky) if flaky else 'нет'}")
+    print(f"\nunstable questions: {', '.join(flaky) if flaky else 'none'}")
 
 
 def main() -> None:
@@ -139,22 +142,22 @@ def main() -> None:
     n_runs = int(sys.argv[2]) if len(sys.argv) > 2 else 1
     fn = {"router": router.answer, "agent": loop.answer}
     if which not in fn:
-        raise SystemExit(f"неизвестная схема {which!r}, доступны: {list(fn)}")
+        raise SystemExit(f"unknown scheme {which!r}, available: {list(fn)}")
 
     llm = OpenAICompatProvider(settings.llm_provider, settings.llm_model)
     golden = load()
-    cache = "выключен" if os.getenv("LLM_CACHE") == "0" else "ВКЛЮЧЁН"
-    print(f"схема: {which}   вопросов: {len(golden)}   прогонов: {n_runs}   "
-          f"модель: {llm.name}/{llm.model}   кеш: {cache}")
-    if n_runs > 1 and cache != "выключен":
-        print("  ВНИМАНИЕ: с включённым кешем повторы вернут тот же ответ, "
-              "размах будет нулевым по построению")
+    cache = "off" if os.getenv("LLM_CACHE") == "0" else "ON"
+    print(f"scheme: {which}   questions: {len(golden)}   runs: {n_runs}   "
+          f"model: {llm.name}/{llm.model}   cache: {cache}")
+    if n_runs > 1 and cache != "off":
+        print("  WARNING: with the cache on, repeats return the same answer and "
+              "the spread will be zero by construction")
     print()
 
     runs = []
     for k in range(n_runs):
         if n_runs > 1:
-            print(f"--- прогон {k + 1}/{n_runs}")
+            print(f"--- run {k + 1}/{n_runs}")
         runs.append(run_scheme(which, fn[which], llm, golden))
 
     report(runs[-1])
@@ -164,7 +167,7 @@ def main() -> None:
     path = EVALS / f"agent_{which}.json"
     path.write_text(json.dumps({"scheme": which, "runs": runs}, ensure_ascii=False, indent=2),
                     encoding="utf-8")
-    print(f"\nзаписано: {path}")
+    print(f"\nwritten: {path}")
 
 
 if __name__ == "__main__":

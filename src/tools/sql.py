@@ -1,24 +1,25 @@
-"""Инструмент SQL: вопрос словами -> запрос -> результат.
+"""SQL tool: a question in words -> a query -> a result.
 
-Три вещи, которые делают это инструментом агента, а не обёрткой над duckdb.
+Three things make this an agent tool rather than a wrapper around duckdb.
 
-1. ОШИБКИ ВОЗВРАЩАЮТСЯ ТЕКСТОМ, А НЕ ИСКЛЮЧЕНИЕМ. Агент должен иметь шанс
-   прочитать сообщение об ошибке и исправить запрос. Исключение убивает цикл,
-   строка «Binder Error: column X does not exist» его учит.
+1. ERRORS COME BACK AS TEXT, NOT AS EXCEPTIONS. The agent must get a chance to
+   read the error message and fix the query. An exception kills the loop; the
+   line "Binder Error: column X does not exist" teaches it.
 
-2. ЗАПРОС ПРОВЕРЯЕТСЯ ДО ВЫПОЛНЕНИЯ. Соединение открыто read-only, так что
-   запись невозможна на уровне движка. Дополнительная проверка нужна не вместо
-   этого, а ради понятного сообщения: отказ за миллисекунду с объяснением
-   полезнее, чем ошибка движка через минуту.
+2. THE QUERY IS VALIDATED BEFORE EXECUTION. The connection is opened read-only,
+   so writes are impossible at the engine level. The extra check is not a
+   replacement for that but exists for a comprehensible message: a refusal in a
+   millisecond with an explanation beats an engine error a minute later.
 
-3. ВИДНЫ ТОЛЬКО ДВЕ ВИТРИНЫ, сырые таблицы скрыты. Витрины уже содержат
-   решение про зерно; соединяя сырые таблицы, модель воспроизведёт fan-out,
-   от которого витрины и защищают. Ограничение сознательное: часть вопросов
-   (оплаты, продавцы, геоданные) станет неотвечаемой. Это записано в бэклог.
+3. ONLY THE TWO MARTS ARE VISIBLE, raw tables are hidden. The marts already
+   encode the decision about grain; joining raw tables, the model would reproduce
+   the fan-out the marts protect against. The restriction is deliberate: some
+   questions (payments, sellers, geodata) become unanswerable. That is written
+   into the backlog.
 
-Уровни описания схемы (SchemaLevel) существуют ради замера: гипотеза, что
-явное указание зерна снижает долю ошибок зерна, проверяется числом, а не
-принимается на веру.
+The schema description levels (SchemaLevel) exist for the sake of measurement:
+the hypothesis that stating the grain explicitly lowers the share of grain errors
+is checked with a number rather than taken on faith.
 """
 from __future__ import annotations
 
@@ -34,7 +35,7 @@ import duckdb
 from src.config import DB_PATH
 
 VIEWS = ("order_facts", "order_summary")
-MAX_ROWS = 50            # столько строк уходит в контекст модели
+MAX_ROWS = 50            # this many rows go into the model context
 TIMEOUT_S = 20.0
 
 FORBIDDEN = re.compile(
@@ -45,11 +46,11 @@ CTE_NAMES = re.compile(r"\b(?:with|,)\s+([a-zA-Z_]\w*)\s+as\s*\(", re.I)
 
 
 class SchemaLevel(IntEnum):
-    """Сколько контекста о схеме получает модель. Каждый уровень - строка ablation."""
-    NAMES = 1        # только имена таблиц и колонок
-    GRAIN = 2        # + чем является одна строка и где живёт какой факт
-    SAMPLES = 3      # + примеры строк
-    FEWSHOT = 4      # + примеры «вопрос -> SQL»
+    """How much schema context the model gets. Each level is one ablation row."""
+    NAMES = 1        # table and column names only
+    GRAIN = 2        # + what one row is and where each fact lives
+    SAMPLES = 3      # + sample rows
+    FEWSHOT = 4      # + "question -> SQL" examples
 
 
 @dataclass
@@ -63,7 +64,7 @@ class SqlResult:
     elapsed_ms: float = 0.0
 
     def as_text(self) -> str:
-        """Как результат выглядит для модели."""
+        """What the result looks like to the model."""
         if not self.ok:
             return f"SQL ERROR: {self.error}"
         if not self.rows:
@@ -85,18 +86,18 @@ def _fmt(v) -> str:
 @lru_cache(maxsize=1)
 def _con() -> duckdb.DuckDBPyConnection:
     if not DB_PATH.exists():
-        raise FileNotFoundError(f"Нет {DB_PATH}. Запусти: make data")
+        raise FileNotFoundError(f"{DB_PATH} is missing. Run: make data")
     return duckdb.connect(str(DB_PATH), read_only=True)
 
 
 def _tables_used(sql: str) -> set[str]:
-    """Имена таблиц из РАЗОБРАННОГО запроса, а не регуляркой по тексту.
+    """Table names from the PARSED query, not from a regex over the text.
 
-    Регулярка вида "from + слово" ломается на EXTRACT(year FROM purchased_at):
-    она считает `purchased_at` таблицей и отвергает совершенно верный запрос.
-    Этот дефект отбраковал правильный ответ модели в первом же прогоне, то есть
-    портил не работу инструмента, а ИЗМЕРЕНИЕ. Разбираем через собственный
-    парсер DuckDB; регулярка остаётся запасным вариантом.
+    A "from + word" regex breaks on EXTRACT(year FROM purchased_at): it takes
+    `purchased_at` for a table and rejects a perfectly valid query. This defect
+    threw away a correct model answer on the very first run - that is, it spoiled
+    not the tool but the MEASUREMENT. We parse through DuckDB's own parser; the
+    regex stays as a fallback.
     """
     try:
         raw = _con().execute("SELECT json_serialize_sql(?)", [sql]).fetchone()[0]
@@ -114,12 +115,12 @@ def _tables_used(sql: str) -> set[str]:
 
         walk(json.loads(raw))
         return out
-    except Exception:                       # noqa: BLE001 - парсер не должен ронять инструмент
+    except Exception:                       # noqa: BLE001 - the parser must not break the tool
         return {t.lower() for t in FROM_JOIN.findall(sql)}
 
 
 def validate(sql: str) -> str | None:
-    """Причина отказа или None. Проверяем ДО выполнения, ради внятного ответа."""
+    """The refusal reason, or None. Checked BEFORE execution, for a clear answer."""
     s = re.sub(r"--[^\n]*|/\*.*?\*/", " ", sql, flags=re.S).strip().rstrip(";")
     if not s:
         return "empty query"
@@ -138,7 +139,7 @@ def validate(sql: str) -> str | None:
 
 
 def run(sql: str) -> SqlResult:
-    """Выполнить запрос. Никогда не бросает исключение: ошибка - часть ответа."""
+    """Run the query. Never raises: an error is part of the answer."""
     import time
 
     if reason := validate(sql):
@@ -152,7 +153,7 @@ def run(sql: str) -> SqlResult:
             cur = con.execute(sql)
             box["cols"] = [d[0] for d in cur.description]
             box["rows"] = cur.fetchmany(MAX_ROWS + 1)
-        except Exception as e:                     # noqa: BLE001 - ошибка идёт модели текстом
+        except Exception as e:                     # noqa: BLE001 - the error goes to the model as text
             box["err"] = f"{type(e).__name__}: {e}"
 
     th = threading.Thread(target=work, daemon=True)
@@ -172,10 +173,11 @@ def run(sql: str) -> SqlResult:
     return SqlResult(True, sql, box["cols"], rows[:MAX_ROWS], truncated=trunc, elapsed_ms=ms)
 
 
-# --- описание схемы: четыре уровня ------------------------------------------
+# --- schema description: four levels ----------------------------------------
 #
-# Уровни отличаются ТОЛЬКО объёмом контекста, не формулировками задачи.
-# Иначе сравнение измеряло бы качество формулировки, а не пользу контекста.
+# The levels differ ONLY in the amount of context, never in how the task is
+# phrased. Otherwise the comparison would measure the quality of the wording
+# rather than the usefulness of the context.
 
 GRAIN = {
     "order_facts": (
@@ -260,28 +262,28 @@ TOOL_SPEC = {
 
 
 def main() -> None:
-    """Ручная проверка: показать уровни схемы и прогнать несколько запросов."""
+    """Manual check: show the schema levels and run a few queries."""
     print("=" * 70)
-    print("УРОВЕНЬ 1 (NAMES)\n")
+    print("LEVEL 1 (NAMES)\n")
     print(describe(SchemaLevel.NAMES))
     print("\n" + "=" * 70)
-    print("УРОВЕНЬ 2 (GRAIN), добавка к первому\n")
+    print("LEVEL 2 (GRAIN), what it adds to the first\n")
     print(describe(SchemaLevel.GRAIN))
 
     checks = [
-        ("верный запрос", "SELECT AVG(review_score) AS s FROM order_summary"),
-        ("ошибка зерна", "SELECT AVG(review_score) AS s FROM order_facts"),
-        ("запись",       "DELETE FROM order_summary"),
-        ("сырая таблица", "SELECT COUNT(*) FROM orders"),
-        ("две команды",  "SELECT 1; DROP TABLE orders"),
-        ("несуществующая колонка", "SELECT nope FROM order_summary"),
-        ("CTE разрешён", "WITH x AS (SELECT 1 AS a) SELECT a FROM x"),
+        ("valid query",     "SELECT AVG(review_score) AS s FROM order_summary"),
+        ("grain error",     "SELECT AVG(review_score) AS s FROM order_facts"),
+        ("write",           "DELETE FROM order_summary"),
+        ("raw table",       "SELECT COUNT(*) FROM orders"),
+        ("two statements",  "SELECT 1; DROP TABLE orders"),
+        ("missing column",  "SELECT nope FROM order_summary"),
+        ("CTE is allowed",  "WITH x AS (SELECT 1 AS a) SELECT a FROM x"),
     ]
     print("\n" + "=" * 70)
-    print("ПОВЕДЕНИЕ ИНСТРУМЕНТА\n")
+    print("TOOL BEHAVIOUR\n")
     for name, sql in checks:
         r = run(sql)
-        status = "OK " if r.ok else "ОТКАЗ"
+        status = "OK    " if r.ok else "REFUSE"
         print(f"[{status}] {name:<24} {r.as_text().splitlines()[0][:70]}")
 
 

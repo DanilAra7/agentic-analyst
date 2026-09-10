@@ -1,7 +1,7 @@
-"""Сборка DuckDB из CSV Olist.
+"""Building the DuckDB database from the Olist CSVs.
 
-DuckDB читает CSV напрямую, поэтому ETL здесь минимальный: типизация,
-переименование в человекочитаемые имена и одна витрина для агента.
+DuckDB reads CSV directly, so the ETL here is minimal: typing, renaming to
+human-readable names, and the marts for the agent.
 """
 from __future__ import annotations
 
@@ -21,17 +21,17 @@ TABLES = {
     "geolocation": "olist_geolocation_dataset.csv",
 }
 
-# ДВЕ витрины на РАЗНЫХ уровнях детализации ("зерне").
+# TWO marts at DIFFERENT levels of detail ("grain").
 #
-# Это не дублирование. Соединение заказов с позициями меняет зерно таблицы:
-# заказ с тремя позициями занимает три строки, и всё, что относится к заказу
-# целиком (оценка отзыва, статус, даты), в этих строках ПОВТОРЯЕТСЯ.
+# This is not duplication. Joining orders with items changes the grain of the
+# table: an order with three items occupies three rows, and everything that
+# belongs to the order as a whole (review score, status, dates) is REPEATED.
 #
-# Отсюда правило: агрегат считается на том зерне, на котором факт реально
-# существует. Цена живёт на позиции, оценка отзыва - на заказе.
-# AVG(review_score) по order_facts вернёт не средний рейтинг заказов, а
-# средний рейтинг, взвешенный по размеру корзины. Число выглядит правдоподобно
-# и является неверным - поэтому оценку из item-витрины мы убрали вовсе.
+# Hence the rule: an aggregate is computed at the grain where the fact actually
+# lives. Price lives at the item level, the review score at the order level.
+# AVG(review_score) over order_facts returns not the mean order rating but the
+# mean rating weighted by basket size. The number looks plausible and is wrong -
+# which is why the score was removed from the item-grain mart entirely.
 
 MART_ITEMS = """
 CREATE OR REPLACE VIEW order_facts AS
@@ -99,21 +99,21 @@ def main() -> None:
     for name, csv in TABLES.items():
         path = RAW / csv
         if not path.exists():
-            raise FileNotFoundError(f"Нет {path}. Запусти: make data")
+            raise FileNotFoundError(f"No {path}. Run: make data")
         con.execute(
             f"CREATE OR REPLACE TABLE {name} AS "
             f"SELECT * FROM read_csv_auto('{path}', header=true)"
         )
         n = con.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0]
-        print(f"  {name:22s} {n:>9,} строк")
+        print(f"  {name:22s} {n:>9,} rows")
 
     con.execute(MART_ITEMS)
     con.execute(MART_ORDERS)
-    con.execute("INSTALL fts; LOAD fts;")  # BM25 для гибридного поиска
+    con.execute("INSTALL fts; LOAD fts;")  # BM25 for hybrid search
     for v in ("order_facts", "order_summary"):
         n = con.execute(f"SELECT COUNT(*) FROM {v}").fetchone()[0]
-        print(f"  {v + ' (view)':22s} {n:>9,} строк")
-    print(f"\nБаза готова: {DB_PATH}")
+        print(f"  {v + ' (view)':22s} {n:>9,} rows")
+    print(f"\nDatabase ready: {DB_PATH}")
     con.close()
 
 

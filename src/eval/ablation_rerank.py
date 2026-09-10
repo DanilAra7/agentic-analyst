@@ -1,21 +1,22 @@
-"""Ablation: cross-encoder реранкер поверх плотного поиска.
+"""Ablation: a cross-encoder reranker on top of dense search.
 
-Что меряем. Плотный поиск достаёт MAX_WINDOW кандидатов; реранкер
-переупорядочивает первые W из них, хвост остаётся как был. Меняя W, получаем
-кривую «качество против латентности».
+What is measured. Dense search pulls MAX_WINDOW candidates; the reranker reorders
+the first W of them and the tail stays as it was. Varying W gives a
+"quality against latency" curve.
 
-Почему хвост не выбрасываем. Иначе recall@10 и recall@20 при W=10 стали бы
-неопределимы, и строки таблицы перестали бы быть сравнимыми между собой.
+Why the tail is not discarded. Otherwise recall@10 and recall@20 at W=10 would be
+undefined, and the table rows would stop being comparable with each other.
 
-Потолок. При окне W recall@k реранкера не может превысить recall@W плотного
-поиска: чего нет в кандидатах, того не отранжируешь. Этот потолок печатается
-рядом с результатом — чтобы было видно, упёрлись мы в ранжирование или в отбор.
+The ceiling. At window W the reranker's recall@k cannot exceed dense search's
+recall@W: you cannot rank what is not among the candidates. That ceiling is
+printed next to the result - so it is visible whether we hit a limit of ranking
+or a limit of selection.
 
-Порядок этапов важен для памяти. Сначала ОБА набора кандидатов добываются
-би-энкодером, затем би-энкодер выгружается, и только потом грузится реранкер.
-Держать в памяти две модели по 2.3 ГБ одновременно незачем.
+The order of the stages matters for memory. First BOTH candidate sets are fetched
+by the bi-encoder, then the bi-encoder is unloaded, and only then is the reranker
+loaded. There is no reason to hold two 2.3 GB models in memory at once.
 
-Оценка чисто оффлайновая: ни одного вызова LLM-API.
+The evaluation is purely offline: not a single LLM API call.
 """
 from __future__ import annotations
 
@@ -30,23 +31,23 @@ from src.eval.retrieval import KS, load_golden, score
 
 WINDOWS = (10, 20, 50)
 MAX_WINDOW = max(WINDOWS)
-LAT_SAMPLE = 8          # сколько запросов таймим по-настоящему, по одному
+LAT_SAMPLE = 8          # how many queries are really timed, one at a time
 
 
 def rss_gb() -> float:
-    """Пиковое потребление памяти процессом. На macOS ru_maxrss в байтах."""
+    """Peak memory used by the process. On macOS ru_maxrss is in bytes."""
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024**3
 
 
 def rerank_scores(reranker, texts_by_id: dict, golden: list[dict],
                   cand: list[list[str]], tag: str) -> list[list[float]]:
-    """Логиты для всех пар (вопрос, кандидат). Кешируются на диск: прогон
-    дорогой, а окна W вложены друг в друга и считаются из одних и тех же чисел."""
+    """Logits for every (question, candidate) pair. Cached to disk: the run is
+    expensive, and the W windows are nested and computed from the same numbers."""
     path = EVALS / f"rerank_scores_{tag}.json"
     if path.exists():
         cached = json.loads(path.read_text(encoding="utf-8"))
         if cached["questions"] == [g["question"] for g in golden] and cached["cand"] == cand:
-            print(f"  [{tag}] логиты взяты из кеша {path.name}")
+            print(f"  [{tag}] logits taken from cache {path.name}")
             return cached["scores"]
 
     t0 = time.perf_counter()
@@ -56,8 +57,8 @@ def rerank_scores(reranker, texts_by_id: dict, golden: list[dict],
         if i % 10 == 0 or i == len(golden):
             el = time.perf_counter() - t0
             eta = el / i * (len(golden) - i)
-            print(f"  [{tag}] {i}/{len(golden)}  прошло {el:.0f} c, осталось ~{eta:.0f} c, "
-                  f"память {rss_gb():.1f} ГБ", flush=True)
+            print(f"  [{tag}] {i}/{len(golden)}  elapsed {el:.0f} s, ~{eta:.0f} s left, "
+                  f"memory {rss_gb():.1f} GB", flush=True)
     path.write_text(json.dumps(
         {"questions": [g["question"] for g in golden], "cand": cand, "scores": out},
         ensure_ascii=False), encoding="utf-8")
@@ -65,7 +66,7 @@ def rerank_scores(reranker, texts_by_id: dict, golden: list[dict],
 
 
 def apply_window(cand: list[str], scores: list[float], w: int) -> list[str]:
-    """Переупорядочить первые w кандидатов по логиту, хвост оставить как есть."""
+    """Reorder the first w candidates by logit, leave the tail as it is."""
     w = min(w, len(cand))
     head = np.argsort(-np.asarray(scores[:w], dtype=np.float32))
     return [cand[i] for i in head] + cand[w:]
@@ -73,7 +74,7 @@ def apply_window(cand: list[str], scores: list[float], w: int) -> list[str]:
 
 def measure_latency(reranker, texts_by_id: dict, golden: list[dict],
                     cand: list[list[str]], w: int) -> dict:
-    """Честная латентность: по одному запросу, как в проде, а не батчем."""
+    """Honest latency: one query at a time, as in production, not batched."""
     lat = []
     for g, ids in list(zip(golden, cand))[:LAT_SAMPLE]:
         texts = [texts_by_id[c] for c in ids[:w]]
@@ -88,7 +89,7 @@ def main() -> None:
     from src.rag.rerank import free_memory, get_reranker
     from src.rag.retrieve import get_retriever
 
-    # --- этап 1: кандидаты. Тут нужен только би-энкодер ---
+    # --- stage 1: candidates. Only the bi-encoder is needed here ---
     retriever = get_retriever()
     sets = {}
     for hard, tag in ((False, "easy"), (True, "hard")):
@@ -97,20 +98,20 @@ def main() -> None:
                                                     k=MAX_WINDOW))
     texts_by_id = {k: v["text"] for k, v in retriever.by_id.items()}
 
-    # --- выгружаем би-энкодер, он своё отработал ---
+    # --- unload the bi-encoder, its work is done ---
     del retriever.model
     get_retriever.cache_clear()
     del retriever
     free_memory()
-    print(f"би-энкодер выгружен, пик памяти {rss_gb():.1f} ГБ\n")
+    print(f"bi-encoder unloaded, peak memory {rss_gb():.1f} GB\n")
 
-    # --- этап 2: реранк ---
+    # --- stage 2: reranking ---
     reranker = get_reranker()
-    print(f"реранкер: {reranker.model_name}\n  устройство {reranker.device}, "
-          f"тип {reranker.dtype}, батч {reranker.batch_size}\n")
+    print(f"reranker: {reranker.model_name}\n  device {reranker.device}, "
+          f"dtype {reranker.dtype}, batch {reranker.batch_size}\n")
 
     results = {}
-    for tag, title in (("easy", "ЛЁГКИЙ"), ("hard", "ТРУДНЫЙ")):
+    for tag, title in (("easy", "EASY"), ("hard", "HARD")):
         golden, cand = sets[tag]
         base = score(cand, golden)
         logits = rerank_scores(reranker, texts_by_id, golden, cand, tag)
@@ -126,24 +127,24 @@ def main() -> None:
                 rows["misses"] = r["misses"]
         results[tag] = rows
 
-        print(f"\n=== {title}   (вопросов: {base['n']})")
-        hdr = (f"{'вариант':<13}" + "".join(f"@{k:<7}" for k in KS)
-               + f"{'MRR':>8}{'p50 мс':>9}{'потолок':>9}")
+        print(f"\n=== {title}   (questions: {base['n']})")
+        hdr = (f"{'variant':<13}" + "".join(f"@{k:<7}" for k in KS)
+               + f"{'MRR':>8}{'p50 ms':>9}{'ceiling':>9}")
         print(hdr)
         print("-" * len(hdr))
         for name, r in rows.items():
             if name == "misses":
                 continue
-            lat = f"{r['latency']['p50_ms']:>9.0f}" if "latency" in r else f"{'—':>9}"
-            ceil = f"{r['ceiling']:>9.3f}" if r.get("ceiling") is not None else f"{'—':>9}"
+            lat = f"{r['latency']['p50_ms']:>9.0f}" if "latency" in r else f"{'-':>9}"
+            ceil = f"{r['ceiling']:>9.3f}" if r.get("ceiling") is not None else f"{'-':>9}"
             print(f"{name:<13}"
                   + "".join(f"{r['recall_strict'][k]:<8.3f}" for k in KS)
                   + f"{r['mrr']:>8.3f}{lat}{ceil}", flush=True)
 
     (EVALS / "ablation_rerank.json").write_text(
         json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\nпик памяти за прогон: {rss_gb():.1f} ГБ")
-    print(f"записано: {EVALS / 'ablation_rerank.json'}")
+    print(f"\npeak memory for the run: {rss_gb():.1f} GB")
+    print(f"written: {EVALS / 'ablation_rerank.json'}")
 
 
 if __name__ == "__main__":

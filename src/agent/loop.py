@@ -1,28 +1,29 @@
-"""Цикл агента: несколько раундов вызовов инструментов со сцеплением.
+"""Agent loop: several rounds of tool calls, with chaining.
 
-Отличие от роутера ровно одно и оно намеренно единственное: следующий вызов
-может зависеть от результата предыдущего. Системный промпт, набор инструментов,
-разбор ответа и подсчёт метрик - те же самые. Иначе сравнение мерило бы разницу
-промптов, а не агентность.
+Exactly one thing separates it from the router, and that is deliberate: the next
+call may depend on the result of the previous one. The system prompt, the tool
+set, response parsing and metric accounting are identical. Otherwise the
+comparison would measure a difference in prompts rather than agency.
 
-Три защиты, без которых цикл нельзя выпускать (бэклог №9):
+Three guards, without which the loop must not ship (backlog #9):
 
-1. ЛИМИТ РАУНДОВ. Модель может не остановиться никогда. Двухисточниковый вопрос
-   требует двух раундов; шесть даёт запас на исправление ошибок и при этом
-   ограничивает худший случай.
+1. ROUND LIMIT. The model may never stop on its own. A two-source question needs
+   two rounds; six leaves room to recover from mistakes while still bounding the
+   worst case.
 
-2. ДЕТЕКЦИЯ ПОВТОРОВ. Самый частый способ зациклиться - повторять один и тот же
-   запрос, получая один и тот же ответ. Повтор не выполняется: вместо результата
-   возвращается текст, объясняющий, что этот вызов уже был. Это дешевле лимита
-   раундов и не тратит вызовы впустую.
+2. REPEAT DETECTION. The most common way to spin forever is to repeat the same
+   call and get the same result. A repeat is not executed: instead of a result
+   the model gets text explaining that this call was already made. That is
+   cheaper than the round limit and does not burn calls.
 
-3. ОШИБКИ ТЕКСТОМ, а не исключением (в src/agent/base.py). Строка
-   «Binder Error: column X does not exist» учит модель; исключение убивает цикл.
+3. ERRORS AS TEXT, not as exceptions (in src/agent/base.py). The line
+   "Binder Error: column X does not exist" teaches the model; an exception kills
+   the loop.
 
-Что НЕ сделано и записано честно: защиты от prompt injection через результаты
-инструментов здесь нет. По решению №20 сначала атака закладывается в корпус и
-измеряется, поддаётся ли агент, и только потом пишется защита. Защита, которую
-не пробовали пробить, защитой не является.
+What is NOT done, recorded honestly: there is no defence here against prompt
+injection through tool results. Per decision #20 the attack is first planted in
+the corpus and the agent measured against it, and only then is the defence
+written. A defence nobody tried to break is not a defence.
 """
 from __future__ import annotations
 
@@ -31,8 +32,8 @@ import json
 from src.agent.base import (FINAL_SPEC, Step, Trace, assistant_msg, execute,
                             run_step, system_prompt)
 
-MAX_ROUNDS = 6          # раунд = один ответ модели, в нём может быть несколько вызовов
-MAX_TOOL_CALLS = 10     # общий потолок на вопрос
+MAX_ROUNDS = 6          # a round = one model reply, which may contain several calls
+MAX_TOOL_CALLS = 10     # overall ceiling per question
 
 
 def answer(llm, question: str) -> Trace:
@@ -45,9 +46,9 @@ def answer(llm, question: str) -> Trace:
         r = run_step(llm, messages, tr=tr)
 
         if not r.tool_calls:
-            # Модель ответила текстом вместо final_answer. Это запасной путь:
-            # ответ принимаем, но помечаем, чтобы такие случаи было видно в
-            # прогоне отдельно, а не растворялись в общей точности.
+            # The model answered with text instead of final_answer. This is the
+            # fallback path: we accept the answer but tag it, so such cases stay
+            # visible in the run instead of dissolving into overall accuracy.
             tr.answer = r.text
             tr.stop_reason = "plain_text_fallback"
             return tr
@@ -73,8 +74,9 @@ def answer(llm, question: str) -> Trace:
             messages.append({"role": "tool", "tool_call_id": call.id,
                              "name": call.name, "content": out})
 
-    # Раунды кончились. Просим ответить тем, что есть: молчание было бы провалом
-    # реализации, а не пределом схемы, и мы бы не отличили одно от другого.
+    # Rounds are exhausted. Ask for an answer from what is already there: silence
+    # would be a failure of the implementation rather than a limit of the scheme,
+    # and we would not be able to tell the two apart.
     tr.stop_reason = "max_rounds"
     messages.append({"role": "user", "content":
                      "You have no more tool calls. Answer in plain text with what you "
@@ -101,9 +103,9 @@ def main() -> None:
         print("=" * 78)
         print("Q:", q)
         for i, s in enumerate(tr.steps, 1):
-            print(f"  шаг {i}: {s.tool}({str(s.arguments)[:86]})")
+            print(f"  step {i}: {s.tool}({str(s.arguments)[:86]})")
             print(f"          -> {s.result[:96].replace(chr(10),' ')}")
-        print(f"вызовов LLM: {tr.llm_calls}   шагов: {len(tr.steps)}   стоп: {tr.stop_reason}")
+        print(f"llm calls: {tr.llm_calls}   steps: {len(tr.steps)}   stop: {tr.stop_reason}")
         print("A:", (tr.answer or "").strip()[:300])
 
 

@@ -1,9 +1,9 @@
-"""Общее для роутера и агента: реестр инструментов, трасса, подсчёт ответа.
+"""Shared by the router and the agent: tool registry, trace, answer grading.
 
-Вынесено отдельно, чтобы роутер и агент отличались РОВНО одним - числом
-разрешённых заходов в инструменты. Если бы у них были разные промпты, разные
-инструменты или разный разбор ответа, сравнение мерило бы эту разницу, а не
-агентность.
+Pulled out separately so that the router and the agent differ in EXACTLY one
+thing - the number of trips to the tools they are allowed. If they had different
+prompts, different tools or different response parsing, the comparison would
+measure that difference rather than agency.
 """
 from __future__ import annotations
 
@@ -19,11 +19,11 @@ from src.tools.search import get_search_tool
 from src.tools.sql import TOOL_SPEC as SQL_SPEC
 from src.tools.sql import SchemaLevel, describe, run
 
-# Выход из цикла - ЯВНОЕ типизированное действие, а не отсутствие вызова.
-# Причина конкретная: раньше «отказался ли агент» определялось регуляркой по
-# свободному тексту, и она шесть раз за проект записывала верное поведение в
-# провалы («do not contain», «is missing», «conflict» вместо «conflicting»).
-# Теперь отказ и конфликт - поля, а не догадка.
+# Exiting the loop is an EXPLICIT typed action, not the absence of a call.
+# The reason is concrete: "did the agent refuse" used to be decided by a regex
+# over free text, and six times over the project it scored correct behaviour as a
+# failure ("do not contain", "is missing", "conflict" instead of "conflicting").
+# Now refusal and conflict are fields, not guesswork.
 FINAL_SPEC = {
     "type": "function",
     "function": {
@@ -78,9 +78,9 @@ Rules:
   Do not substitute a plausible-looking number.
 - Keep the final answer short: the direct answer first, then the source ids."""
 
-# Защита включается отдельным блоком, чтобы можно было померить ДО и ПОСЛЕ на
-# одном и том же наборе. Решение №20: защита, которую не пробовали пробить,
-# защитой не является; значит нужны и атака, и обе версии промпта.
+# The defence is a separate block so it can be measured BEFORE and AFTER on the
+# same set. Decision #20: a defence nobody tried to break is not a defence, so we
+# need both the attack and both versions of the prompt.
 DEFENSE = """
 
 Two rules about the material you receive:
@@ -116,14 +116,14 @@ class Trace:
     completion_tokens: int = 0
     ms: float = 0.0
     stop_reason: str = ""
-    answered: bool | None = None     # None = модель не вызвала final_answer
+    answered: bool | None = None     # None = the model never called final_answer
     sources: list[str] = field(default_factory=list)
     conflict: str = ""
 
     @property
     def tools_used(self) -> list[str]:
-        """Инструменты ДОБЫЧИ данных. final_answer - способ выйти из цикла,
-        а не источник, и в разметке `needs_tools` его нет."""
+        """Data-FETCHING tools. final_answer is a way out of the loop, not a
+        source, and it does not appear in the `needs_tools` labels."""
         return [s.tool for s in self.steps if s.tool != "final_answer"]
 
 
@@ -135,8 +135,8 @@ class Trace:
 
 
 def execute(name: str, args: dict) -> tuple[str, bool]:
-    """Выполнить инструмент. Ошибка возвращается ТЕКСТОМ: агент должен иметь
-    шанс её прочитать и исправиться, исключение убило бы цикл."""
+    """Run a tool. An error comes back as TEXT: the agent must get a chance to
+    read it and correct itself; an exception would kill the loop."""
     if "__malformed__" in args:
         return (f"TOOL ERROR: arguments were not valid JSON: "
                 f"{args['__malformed__'][:200]}"), False
@@ -181,11 +181,11 @@ def run_step(llm, messages: list[dict], tools=TOOL_SPECS, tr: Trace | None = Non
 
 
 def assistant_msg(r) -> dict:
-    """Ответ модели обратно в историю диалога.
+    """The model's reply back into the dialogue history.
 
-    Служебные поля провайдера (`c.extra`) пробрасываются как есть: Gemini 3
-    кладёт туда `thought_signature` и без него отвечает 400 на следующий раунд.
-    Роутер этого не замечал - у него следующего раунда нет.
+    Provider-internal fields (`c.extra`) are passed through as they are: Gemini 3
+    puts `thought_signature` there and without it returns 400 on the next round.
+    The router never noticed this - it has no next round.
     """
     m: dict = {"role": "assistant", "content": r.text or ""}
     if r.tool_calls:
@@ -197,14 +197,15 @@ def assistant_msg(r) -> dict:
     return m
 
 
-# ---------------------------------------------------------------- подсчёт
+# ---------------------------------------------------------------- grading
 
-# Определение отказа регуляркой - слабое место замера, и вот почему оно уже
-# сработало против нас: агент ответил «The sources DO not contain data ... for
-# Portugal», то есть отказался верно, а шаблон ждал «does not contain» и записал
-# это в провалы. Четвёртый случай в проекте, когда врал измеритель, а не система.
-# Шаблон расширен, но остаётся эвристикой: настоящее решение - структурированный
-# вывод, где отказ является отдельным полем, а не догадкой по тексту. Бэклог №36.
+# Detecting refusal with a regex is the weak point of the measurement, and here
+# is how it already worked against us: the agent answered "The sources DO not
+# contain data ... for Portugal" - a correct refusal - while the pattern expected
+# "does not contain" and scored it as a failure. The fourth case in this project
+# where the instrument lied rather than the system. The pattern was widened but
+# stays a heuristic: the real fix is structured output where refusal is its own
+# field rather than a guess from text. Backlog #36.
 REFUSAL = re.compile(
     r"\b(?:cannot|can'?t|unable to|not possible|no such|"
     r"not available|unavailable|no data|not present|not stored|not recorded|"
@@ -226,15 +227,16 @@ def numbers_in(text: str) -> list[float]:
 
 
 def grade(q: dict, tr: Trace) -> dict:
-    """Три метрики решения №19.
+    """The three metrics of decision #19.
 
-    Отказ читается ПОЛЕМ `answered`, а не шаблоном по тексту (решение №28).
-    Регулярка остаётся только как запасной вариант, если модель не вызвала
-    final_answer вовсе - и такие случаи считаются отдельно.
+    Refusal is read from the `answered` FIELD, not from a text pattern
+    (decision #28). The regex remains only as a fallback for when the model never
+    called final_answer at all - and those cases are counted separately.
 
-    Что осталось эвристикой: числовой ответ ищется среди всех чисел в поле
-    `answer`, поэтому случайное совпадение возможно. Отдельного поля под число
-    не заводим намеренно - оно подсказывало бы модели форму ответа.
+    What stays a heuristic: the numeric answer is looked for among all numbers in
+    the `answer` field, so an accidental match is possible. We deliberately do not
+    add a separate numeric field - it would hint the shape of the answer to the
+    model.
     """
     ans = tr.answer or ""
     refused = (not tr.answered) if tr.answered is not None else bool(REFUSAL.search(ans))
@@ -253,9 +255,9 @@ def grade(q: dict, tr: Trace) -> dict:
         "correct": correct,
         "tools_ok": set(tr.tools_used) == set(q["needs_tools"]),
         "tools_used": tr.tools_used,
-        # Шаги = вызовы ДОБЫЧИ данных. final_answer - это выход из цикла,
-        # и если считать его шагом, каждая схема получит +1 из ниоткуда, а
-        # сравнение с прежними числами сломается.
+        # Steps = data-FETCHING calls. final_answer is the exit from the loop,
+        # and counting it as a step would give every scheme +1 out of nowhere,
+        # breaking comparison with the earlier numbers.
         "steps": len(tr.tools_used),
         "llm_calls": tr.llm_calls,
         "ms": tr.ms,

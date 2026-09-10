@@ -456,9 +456,6 @@ column in the table above is produced.
 | `src/llm/` | provider abstraction, retries, on-disk cache |
 | `evals/` | golden sets, chunk index, all measurement outputs |
 
-`DECISIONS.md` and `BACKLOG.md` are written in Russian; the code and this README
-are in English.
-
 ---
 
 ## License
