@@ -334,15 +334,17 @@ can be re-run as often as needed.
 
 ### Known gaps in the measurement
 
-Written down rather than hidden — see `BACKLOG.md` for all 27 items.
+Written down rather than hidden — see `BACKLOG.md` for all 50 items.
 
 - The judge has not been validated against human labels yet (item 14).
 - The hard set is small (51 questions) and contains no keyword-style queries,
   which is exactly why BM25 cannot be judged on it (items 24, 25).
 - Reranker latency is measured on a laptop GPU, not production hardware (item 22).
-- **Refusal is detected by a regular expression over free text.** It has already
-  scored two correct refusals as failures ("do not contain", "is missing"). The
-  fix is structured output with refusal as a field, not a guess (item 36).
+- **Refusal falls back to a regular expression over free text.** The regex scored
+  correct behaviour as a failure six times, so refusal is now a typed field on
+  `final_answer` (decision 28). The regex survives only for the case where the model
+  answers in plain text without calling the tool, and those runs are tagged
+  `plain_text_fallback` so they stay visible (item 36).
 - **A single run is not a measurement.** Two agent runs scored 0.88 and 1.00 on
   the two-source questions; the difference is one question where the agent looped
   and hit the round limit. At n=8 that is 0.125 - coarser than differences worth
@@ -446,7 +448,7 @@ column in the table above is produced.
 | Path | What |
 |---|---|
 | `DECISIONS.md` | **14 architectural decisions**, each with alternatives, cost and the number that verifies it |
-| `BACKLOG.md` | 27 open items, each tied to observed evidence |
+| `BACKLOG.md` | 50 items, 3 of them closed, each tied to observed evidence |
 | `src/rag/` | chunking, embedding index, dense search, reranker |
 | `src/tools/` | the two agent tools: read-only SQL over DuckDB, document search |
 | `src/agent/` | shared plumbing, the router baseline, the agent loop |

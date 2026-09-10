@@ -275,20 +275,26 @@ value was chosen "to cover the longest chunk", not measured. It is a trade-off k
 snippet means a fuller answer but more tokens, more cost and more latency. An ablation over
 700 / 1200 / 1800 / no truncation would give the curve.
 
-### 35. Agent latency is measured through the cache and is therefore fictitious
+### 35. CLOSED. Agent latency is measured through the cache and is therefore fictitious
 The router run shows timings of about 1 ms — those are LLM cache hits. An honest latency figure
 needs a separate run with the cache off on a small sample (debt 12, now become relevant).
+**Closed by decision 32.** `src/eval/latency.py` refuses to start unless `LLM_CACHE=0`, and
+the first honest budget is in the README.
 
-### 36. Refusal is detected by a regular expression and should be a field
+### 36. CLOSED. Refusal is detected by a regular expression and should be a field
 Decision 25: the pattern has already missed twice on correct refusals ("do not contain",
 "is missing"). Structured output is needed: the model returns `{answer, refused, sources}` and
 refusal is read from a field rather than guessed from text. It affects both schemes equally, so
 the comparison stays fair.
+**Closed by decision 28.** `final_answer` carries `answered`, `answer`, `sources`, `conflict`.
+The regex remains only as the fallback for a plain-text answer, and those runs are tagged.
 
-### 37. One run is not a measurement
+### 37. CLOSED. One run is not a measurement
 Decision 23: two agent runs gave 0.88 and 1.00 on the two-source bucket. A difference of one
 question (`bq5` looping) equals 0.125 at n=8. Three or more runs with a mean and a spread are
 needed, otherwise the differences under discussion drown in noise.
+**Closed by decision 29.** Three runs with `LLM_CACHE=0`; the spread turned out to be one
+question, not noise. `make agent-eval` takes a run count.
 
 ### 38. A router+agent hybrid as a separate configuration
 Decision 23: on single-source questions the agent gives nothing (both schemes 1.00) while
