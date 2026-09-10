@@ -1,8 +1,8 @@
-"""Получение датасета Olist.
+"""Fetching the Olist dataset.
 
-Датасет лежит на Kaggle (olistbr/brazilian-ecommerce) и требует авторизации,
-поэтому автоматическая загрузка возможна только через настроенный kaggle CLI.
-Альтернатива: положить CSV в data/raw руками.
+The dataset lives on Kaggle (olistbr/brazilian-ecommerce) and requires
+authentication, so automatic download only works through a configured kaggle CLI.
+The alternative is to drop the CSVs into data/raw by hand.
 """
 from __future__ import annotations
 
@@ -32,11 +32,11 @@ def missing() -> list[str]:
 
 def main() -> int:
     if not (gone := missing()):
-        print(f"Все {len(EXPECTED)} файлов на месте: {RAW}")
+        print(f"All {len(EXPECTED)} files present: {RAW}")
         return 0
 
     if shutil.which("kaggle"):
-        print(f"Качаю {SLUG} через kaggle CLI...")
+        print(f"Downloading {SLUG} through the kaggle CLI...")
         subprocess.run(
             ["kaggle", "datasets", "download", "-d", SLUG, "-p", str(RAW), "--unzip"],
             check=True,
@@ -45,16 +45,16 @@ def main() -> int:
 
     if gone:
         print(
-            f"Не хватает {len(gone)} файлов:\n  " + "\n  ".join(gone) + "\n\n"
-            f"Положи их в {RAW}\n"
-            f"Источник: https://www.kaggle.com/datasets/{SLUG}\n"
-            "Либо настрой kaggle CLI: pip install kaggle, затем положи "
-            "kaggle.json в ~/.kaggle/ (Kaggle > Settings > Create New Token).",
+            f"Missing {len(gone)} files:\n  " + "\n  ".join(gone) + "\n\n"
+            f"Put them into {RAW}\n"
+            f"Source: https://www.kaggle.com/datasets/{SLUG}\n"
+            "Or configure the kaggle CLI: pip install kaggle, then place "
+            "kaggle.json in ~/.kaggle/ (Kaggle > Settings > Create New Token).",
             file=sys.stderr,
         )
         return 1
 
-    print("Готово.")
+    print("Done.")
     return 0
 
 

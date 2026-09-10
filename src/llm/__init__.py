@@ -12,7 +12,7 @@ def get_llm(provider: str | None = None, model: str | None = None) -> OpenAIComp
 
 
 def get_judge() -> OpenAICompatProvider:
-    """Судья обязан быть другой моделью, чем генератор (см. Settings.__post_init__)."""
+    """The judge must be a different model from the generator (see Settings.__post_init__)."""
     return OpenAICompatProvider(settings.judge_provider, settings.judge_model)
 
 

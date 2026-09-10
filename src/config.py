@@ -1,4 +1,4 @@
-"""Конфигурация из переменных окружения."""
+"""Configuration from environment variables."""
 from __future__ import annotations
 
 import os
@@ -30,8 +30,8 @@ class Settings:
     def __post_init__(self) -> None:
         if (self.judge_provider, self.judge_model) == (self.llm_provider, self.llm_model):
             raise ValueError(
-                "Судья обязан отличаться от генератора: модель систематически "
-                "завышает оценку собственным ответам (self-preference bias)."
+                "The judge must differ from the generator: a model systematically "
+                "over-scores its own answers (self-preference bias)."
             )
 
 

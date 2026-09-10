@@ -1,8 +1,8 @@
-"""SQLite-кеш вызовов LLM.
+"""SQLite cache for LLM calls.
 
-Зачем: прогон golden set из 200 вопросов по 6 конфигурациям это 1200+ запросов.
-На бесплатных тарифах в лимиты не влезть, а повторные прогоны должны быть
-бесплатными и воспроизводимыми. Ключ включает всё, что влияет на ответ.
+Why: running a 200-question golden set across 6 configurations is 1200+ requests.
+Free tiers cannot absorb that, and repeat runs have to be free and reproducible.
+The key includes everything that can affect the answer.
 """
 from __future__ import annotations
 

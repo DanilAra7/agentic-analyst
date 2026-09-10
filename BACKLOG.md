@@ -1,376 +1,369 @@
-# Бэклог улучшений
+# Improvement backlog
 
-Каждый пункт привязан к **наблюдаемому провалу**, а не к списку модных приёмов.
-Колонка «свидетельство» — откуда известно, что это вообще проблема.
-Пока улучшение не измерено, оно остаётся гипотезой.
+Every item is tied to an **observed failure**, not to a list of fashionable techniques.
+The "evidence" line says how we know this is a problem at all.
+Until an improvement is measured, it remains a hypothesis.
 
-Бейзлайн на смоук-тесте (12 вопросов вручную, плотный поиск, чанк 400/60):
+Baseline on the smoke test (12 hand-written questions, dense retrieval, 400/60 chunks):
 `recall@1 = 0.58`, `recall@5 = 0.58`, `recall@20 = 0.83`.
 
-Ключевое наблюдение: **recall@1 = recall@5**. Плотный поиск либо находит нужное
-первым, либо не находит в первой пятёрке вовсе. При этом recall@20 заметно выше.
-Значит основная беда — **ранжирование, а не отсутствие документа в базе**.
+The key observation: **recall@1 = recall@5**. Dense retrieval either finds the right
+piece first or does not find it in the top five at all. Meanwhile recall@20 is markedly
+higher. So the main trouble is **ranking, not the absence of the document from the index**.
 
 ---
 
-## M2 — ретрив
+## M2 — retrieval
 
-### 1. Cross-encoder реранкер
-**Свидетельство.** Разрыв recall@5 = 0.58 против recall@20 = 0.83. Четверть
-вопросов находит нужный чанк, но ставит его на позиции 6–20.
-**Что делаем.** Достаём top-50 плотным поиском, прогоняем через
-`bge-reranker-v2-m3`, оставляем top-5.
-**Чем платим.** Латентность: cross-encoder считает пару «запрос+документ» и не
-кешируется заранее. Ожидаем +0.5–1 с на запрос.
-**Ожидание.** Наибольший прирост из всех пунктов. Проверяется на вопросах
-«How long do I have to return something?» (#6) и «money back» (#10).
+### 1. Cross-encoder reranker
+**Evidence.** The gap between recall@5 = 0.58 and recall@20 = 0.83. A quarter of the
+questions find the right chunk but place it at ranks 6-20.
+**What we do.** Take the top-50 by dense retrieval, run them through
+`bge-reranker-v2-m3`, keep the top-5.
+**What it costs.** Latency: a cross-encoder scores the pair "query + document" and cannot
+be precomputed. Expect +0.5-1 s per request.
+**Expectation.** The largest gain of all the items. Checked on the questions
+"How long do I have to return something?" (#6) and "money back" (#10).
 
-### 2. Гибридный поиск, BM25 + RRF
-**Свидетельство.** «Which return code is used when the **wrong item** was
-shipped?» — #8. «Who pays if item arrived **broken**?» — не найден вовсе. Слов
-«wrong item» и «broken» в документах нет, есть коды RC-103 и RC-101.
-**Что делаем.** DuckDB FTS для BM25, объединение с плотным поиском через
-Reciprocal Rank Fusion.
-**Чем платим.** Второй индекс, синхронизация при обновлении корпуса.
-**Ожидание.** Чинит точные термины и коды, почти не влияет на перефразировки.
+### 2. Hybrid search, BM25 + RRF
+**Evidence.** "Which return code is used when the **wrong item** was shipped?" — #8.
+"Who pays if item arrived **broken**?" — not found at all. The words "wrong item" and
+"broken" do not appear in the documents; the codes RC-103 and RC-101 do.
+**What we do.** DuckDB FTS for BM25, fused with dense retrieval through Reciprocal Rank
+Fusion.
+**What it costs.** A second index and synchronisation when the corpus changes.
+**Expectation.** Fixes exact terms and codes, has almost no effect on paraphrases.
 
-### 3. Фильтр по метаданным, зависящий от контекста
-**Свидетельство.** «What is the current restocking fee?» отработал (#1), а
-«How long do I have to return something?» — #6: конкурируют POL-RET-001
-(отменена) и POL-RET-002 (действует).
-**Что делаем.** По умолчанию `status = IN_FORCE`. Если в запросе есть дата или
-отсылка к прошлому — архив открывается.
-**Почему не жёсткий фильтр.** Он сломает законные вопросы вида «какая политика
-действовала для заказа 2017 года». Ответ на них лежит именно в отменённой версии.
-**Чем платим.** Нужен детектор «вопрос про прошлое» — ещё одна точка отказа.
-**Ожидание.** Дёшево, узко, надёжно.
+### 3. Context-dependent metadata filter
+**Evidence.** "What is the current restocking fee?" worked (#1), while "How long do I have
+to return something?" — #6 — did not: POL-RET-001 (superseded) and POL-RET-002 (in force)
+compete.
+**What we do.** `status = IN_FORCE` by default. If the query carries a date or a reference
+to the past, the archive is opened.
+**Why not a hard filter.** It would break legitimate questions of the form "which policy
+applied to a 2017 order". The answer to those lies precisely in the superseded version.
+**What it costs.** A "question about the past" detector is needed — one more point of failure.
+**Expectation.** Cheap, narrow, reliable.
 
 ### 4. Contextual retrieval
-**Свидетельство.** Чанки из POL-RATE-001 и таблиц теряют субъект: строка
-тарифа не знает, к какому штату относится.
-**Что делаем.** Перед эмбеддингом дописываем в начало чанка краткий контекст
-документа. Генерируется LLM с кешированием промпта.
-**Чем платим.** Один прогон LLM по всем чанкам, переиндексация.
-**Ожидание.** Работает в связке с гибридом и реранкером, отдельно даёт меньше.
+**Evidence.** Chunks from POL-RATE-001 and from tables lose their subject: a rate row does
+not know which state it belongs to.
+**What we do.** Prepend a short document context to the chunk before embedding. Generated
+by an LLM with prompt caching.
+**What it costs.** One LLM pass over all chunks, plus reindexing.
+**Expectation.** Works in combination with hybrid search and the reranker; on its own it
+gives less.
 
-### 5. Приближённый поиск (HNSW) вместо точного
-**Свидетельство.** Пока не нужен: 422 чанка, точный перебор занимает
-миллисекунды.
-**Зачем всё равно делаем.** Отдельной строкой ablation — показать, **сколько
-recall стоит скорость**. Точный поиск остаётся эталоном для сравнения.
-**Чем платим.** Ничем на этом объёме; смысл пункта именно в измерении.
+### 5. Approximate search (HNSW) instead of exact
+**Evidence.** Not needed yet: 422 chunks, an exact scan takes milliseconds.
+**Why we do it anyway.** As a separate ablation row — to show **how much recall the speed
+costs**. Exact search stays the reference for comparison.
+**What it costs.** Nothing at this scale; the point of the item is precisely the measurement.
 
-### 6. Переписывание запроса
-**Свидетельство.** Появится в диалоговом режиме: на реплику «а сколько это
-стоит?» искать нечего.
-**Статус.** Отложено до M3, вне диалога бессмысленно.
-
----
-
-## M3 — агент
-
-### 7. SQL-инструмент
-Пишет Данил. Text-to-SQL по DuckDB, две витрины разного зерна
-(`order_facts` — позиции, `order_summary` — заказы).
-**Подводный камень.** Модель будет считать агрегаты на неверном зерне. Нужны
-описания инструмента, явно называющие зерно каждой витрины.
-
-### 8. Инструмент поиска по документам
-Обёртка над лучшей конфигурацией из M2.
-
-### 9. Цикл агента
-Лимит итераций, детекция повторов, обработка ошибок инструмента текстом,
-защита от prompt injection через результаты инструментов.
-
-### 10. Сложные типы вопросов в golden set
-Вопросы на два источника (SQL + документ), вопросы без ответа в корпусе,
-опечатки, другой язык. Отложены сознательно: смешанный набор невозможно
-интерпретировать, пока не измерен простой случай.
+### 6. Query rewriting
+**Evidence.** Will appear in conversational mode: there is nothing to search for in the
+turn "and how much does that cost?".
+**Status.** Deferred to M3; pointless outside a dialogue.
 
 ---
 
-## M4–M5 — observability и оптимизация
+## M3 — agent
+
+### 7. SQL tool
+Text-to-SQL over DuckDB, two marts of different grain (`order_facts` — items,
+`order_summary` — orders).
+**The pitfall.** The model will compute aggregates at the wrong grain. The tool description
+has to name the grain of each mart explicitly.
+
+### 8. Document search tool
+A wrapper over the best configuration from M2.
+
+### 9. Agent loop
+Iteration limit, repeat detection, tool errors returned as text, protection against prompt
+injection through tool results.
+
+### 10. Difficult question types in the golden set
+Questions requiring two sources (SQL + document), questions with no answer in the corpus,
+typos, another language. Deliberately deferred: a mixed set is impossible to interpret
+until the simple case has been measured.
+
+---
+
+## M4–M5 — observability and optimisation
 
 ### 11. Langfuse
-Трейсы, вход и выход каждого шага, tool calls, разбивка латентности и токенов.
+Traces, the input and output of every step, tool calls, a breakdown of latency and tokens.
 
-### 12. Честный замер латентности
-**Проблема.** Кеш возвращает ответ мгновенно, поэтому p95 по прогону с кешем —
-фикция. Система, отвечающая за 3 секунды, покажет 100 мс.
-**Решение.** Разделить прогоны: eval корректности идёт с кешем (дёшево,
-детерминированно, часто), бенчмарк латентности — с выключенным кешем на
-небольшой выборке (дорого, редко). Это два разных измерения с разными задачами.
+### 12. An honest latency measurement
+**Problem.** The cache returns an answer instantly, so a p95 from a cached run is a fiction.
+A system that answers in 3 seconds will show 100 ms.
+**Solution.** Split the runs: the correctness eval runs with the cache (cheap, deterministic,
+frequent), the latency benchmark runs with the cache off on a small sample (expensive, rare).
+These are two different measurements with different purposes.
 
-### 13. Оптимизация agent flow
-Сокращение числа шагов, параллельные вызовы независимых инструментов,
-стриминг ответа. Замер до и после.
-
----
-
-## Методологический долг
-
-### 14. ЧАСТИЧНО. Валидация судьи
-100 примеров размечаются вручную, считается согласованность с LLM-судьёй.
-**Особенно важно, потому что** работник и судья у нас от одного провайдера
-(Mistral), и остаточное смещение self-preference надо измерить, а не
-предположить его отсутствие.
-
-### 15. Синтетические вопросы нечестно лёгкие
-Порождённые из чанка вопросы наследуют его лексику. Живой пользователь спросит
-другими словами. Нужны перефразированные вопросы — не ради сложности, а ради
-реалистичности.
+### 13. Agent flow optimisation
+Fewer steps, parallel calls to independent tools, streaming the answer. Measured before
+and after.
 
 ---
 
-## Методологический долг (продолжение)
+## Methodological debt
 
-### 16. ЗАКРЫТО. Одна эталонная метка на вопрос занижает recall
-**Свидетельство.** «When will my stationery order arrive in São Paulo?» помечен
-как непопадание, но на него честно отвечают минимум четыре документа: таблица
-тарифов по SP, регламент сроков, региональный справочник SP и категорийный
-справочник. Метка одна, правильных ответов несколько.
-**Масштаб проблемы неизвестен** — часть из 18 провалов на трудном наборе может
-быть такими же ложными.
-**Варианты.** (а) множественные метки при генерации; (б) оценка релевантности
-судьёй вместо жёсткого совпадения chunk_id; (в) ручная доразметка провалов.
-**Результат аудита (см. решение №8).** Полностью отвечающих альтернатив нет
-(0/18). Частично отвечающих — 6/18. Бейзлайн honest range: **0.695-0.797**.
-Полная переразметка не нужна, но обе границы вилки надо нести через всю ablation.
+### 14. PARTIAL. Judge validation
+100 examples are labelled by hand and the agreement with the LLM judge is computed.
+**This matters especially because** the worker and the judge come from the same provider,
+and the residual self-preference bias has to be measured rather than assumed away.
 
-### 17. Трудный набор мал (59 вопросов)
-Разговорные вопросы чаще теряют различающую сущность и отбраковываются.
-Нужно либо смягчить требование, либо генерировать с запасом и добирать до 120+.
-
-### 18. Диагноз уточнён: поиск попадает в окрестность, а не в цифру
-**Свидетельство.** В 6 из 18 провалов трудного набора выдаётся `OPS-XX-001`
-нужного штата — правильный регион, но базовые сроки вместо точной цифры из
-таблицы тарифов `POL-RATE-001`.
-**Что это меняет.** Раньше диагноз звучал как «на трудных вопросах не находится
-документ». Точнее: находится **смежный** документ. Значит реранкер должен не
-столько поднимать нужное из глубины, сколько **различать похожие документы** —
-а это ровно то, что cross-encoder умеет лучше би-энкодера.
-
-### 19. Числовые диапазоны в таблицах
-**Свидетельство.** Вопрос «сколько стоит отправить 2 kg», в таблице тарифов стоит
-диапазон `1.0–3.0 kg`. Строки «2» в чанке нет вовсе.
-**Почему это трудно.** Ни BM25, ни векторный поиск не понимают, что 2 попадает
-внутрь интервала 1.0–3.0. Contextual retrieval это тоже НЕ чинит: дописывание
-контекста не превращает «2» в «1.0–3.0».
-**Варианты.** (а) обогащать чанк при индексации — разворачивать диапазон в явное
-перечисление значений; (б) выносить таблицу в структурированный вид и отвечать
-на такие вопросы вычислением, а не поиском (то есть инструментом, а не RAG).
-**Наблюдение.** Вариант (б) намекает, что часть вопросов вообще не про поиск.
-Тарифная таблица — это данные, а не текст, и ей место в SQL-инструменте.
-
-### 20. Классы провалов после чистки разметки
-Актуальная разбивка провалов трудного набора:
-- **ранжирование** — документ находится, но ниже 5-го места. Целится реранкер
-- **числовые диапазоны** — см. пункт 19
-- класс «потерян штат» ЗАКРЫТ: оказался браком golden set, не проблемой поиска
-
-### 21. Реранкер усиливает подмену «цифра -> окрестность»
-**Свидетельство.** 4 вопроса трудного набора, где эталон был в топ-3 до реранка и
-вылетел после. Во всех наверх встал `OPS-XX-001` нужного штата.
-**Почему.** Cross-encoder награждает тематическую цельность пары; справочник штата
-цельный, строка тарифной сетки — нет.
-**Варианты.** (а) вынести тарифы в SQL-инструмент (см. №19) — устраняет класс целиком;
-(б) обогащать чанки таблицы связным текстом при индексации, чтобы им было чем совпасть;
-(в) отдельный порог/буст по типу документа.
-**Наблюдение.** `POL-RATE-001#18` и `#19` — соседние чанки одной таблицы — реранкер
-между собой не различает. Это тот же дефект, только внутри документа.
-
-### 22. Латентность реранкера не измерена на проде-подобном железе
-p50 от 1.6 до 5.1 с — это Apple M4 GPU, float16, модель на 568M параметров.
-Для честной цифры нужен один из: модель поменьше (`bge-reranker-base`), ONNX/квантизация,
-либо хостед-реранкер по API. Сейчас в README стоит пометка, что это относительная,
-а не абсолютная величина.
-
-### 23. Латентность реранкера зависит от длины чанков, не только от K
-Пробный замер на коротких чанках дал 2.1 с на окне 50, реальный прогон — 5.1 с.
-Причина: внимание квадратично по длине пары, а в выдачу попадают куски тарифной
-таблицы под 400 токенов. В README нужна не медиана, а перцентили.
-
-### 24. BM25 отложен: измерять нечем
-Проверка перед постройкой (решение №12): на трудном наборе 0 вопросов из 51 содержат
-точный код, медианное пересечение слов с эталоном 0.33. Генератор трудных вопросов
-перефразировал всё в живую речь и вычистил коды. Живой пользователь коды печатает.
-**Сначала пункт 25, потом BM25.**
-
-### 25. Третий тип вопросов в golden set: короткие и с кодами
-Как ищут в справочном центре на самом деле: `SEDEX-12 deadline`, `PAC-STD AC`,
-номер накладной. Сейчас таких нет ни в одном наборе. Без них гибрид неизмерим,
-а с ними закрывается и долг №17 (трудный набор мал).
-
-### 26. ЗАКРЫТО. Иерархический поиск: померили, приза нет
-Идея Данила. `lenient@20 = 0.980` НЕ является потолком иерархии: это метрика по
-кускам (документ засчитан, если пробился любой его кусок), а иерархия ищет по одному
-вектору на документ. Для тарифной таблицы в 8000 токенов такой вектор размажется.
-**Сделано, решение №14.** Документный поиск: @1 0.667 против 0.843 у чанков; полная
-симуляция иерархии совпала с плоским поиском до третьего знака. Не строим.
-Осталось открытым только small-to-big — он про генерацию, метриками поиска не меряется.
-
-### 27. Реранкер надо уметь выключать по типу запроса
-Решение №13: он полезен для recall@5 и вреден для recall@1. Значит это не «включить
-навсегда», а решение уровня запроса. Кандидат на правило: если топ-1 плотного поиска
-сильно оторван от топ-2 — не реранжировать. Порог калибруется на golden set.
-
-### 28. SQL-инструмент видит только витрины, сырые таблицы скрыты
-Сознательное ограничение (решение №16): витрины несут решение про зерно, а
-соединяя сырые таблицы модель воспроизведёт fan-out. Цена: вопросы про оплаты,
-продавцов и геоданные становятся неотвечаемыми, потому что этих таблиц нет в
-витринах. Если такие вопросы понадобятся, добавлять их надо витриной, а не
-открытием доступа к сырым таблицам.
-
-### 29. Таймаут SQL проверен только сверху
-`TIMEOUT_S = 20` и прерывание через `con.interrupt()` реализованы, но на реальных
-данных ни один запрос до лимита не дошёл (самый тяжёлый соединение 113 тыс. x 113 тыс.
-уложился в 5.2 с). Значит ветка прерывания не выполнялась ни разу.
-**Нужен тест, который её реально запускает**, иначе это непроверенный код.
-
-### 30. Модель не отказывается отвечать на неотвечаемый вопрос
-Решение №17: `d01` провален на всех четырёх уровнях описания схемы. Модель уверенно
-возвращает число, которое выглядит правдоподобно и означает не то, что спросили.
-**Варианты.** (а) отдельная инструкция про отказ в системном промпте и замер, помогает
-ли она; (б) проверка постфактум: сверять смысл колонок ответа с вопросом; (в) больше
-неотвечаемых вопросов в наборе - сейчас он один, и вывод держится на одном примере.
-**Начинать с (в):** один пример это не измерение.
-
-### 31. Набор из 34 вопросов слишком мал для слабых эффектов
-95% интервал при accuracy 0.941 и n=34 составляет 0.809-0.984. Разница в один вопрос
-между уровнями неотличима от шума. Чтобы видеть эффекты порядка 5 процентных пунктов,
-нужно 150+ вопросов либо более слабая модель, у которой есть куда падать.
-
-### 32. Замер сделан на одной модели
-Вывод «описание зерна не помогает» получен на `gemini-3.5-flash-lite`. На модели
-послабее ошибки зерна могут появиться, и тогда описание начнёт работать. Прогон на
-втором провайдере превратил бы утверждение про эту модель в утверждение про задачу.
+### 15. Synthetic questions are unfairly easy
+Questions generated from a chunk inherit its wording. A real user will ask in different
+words. Paraphrased questions are needed — not for the sake of difficulty but for realism.
 
 ---
 
-## Открытые развилки
+## Methodological debt (continued)
 
-Раздел заведён после замечания Данила: принятые решения лежат в `DECISIONS.md`,
-отложенные задачи здесь, а развилка, которая обсуждается прямо сейчас, не была
-записана нигде. После паузы приходилось вспоминать по переписке.
-**Правило:** развилка попадает сюда в момент постановки и уходит в `DECISIONS.md`
-в момент выбора.
+### 16. CLOSED. One gold label per question understates recall
+**Evidence.** "When will my stationery order arrive in São Paulo?" is marked as a miss, yet
+at least four documents answer it honestly: the SP rate table, the deadline policy, the SP
+regional handbook and the category handbook. There is one label and several right answers.
+**The scale of the problem is unknown** — some of the 18 misses on the hard set may be false
+in the same way.
+**Options.** (a) multiple labels at generation time; (b) relevance scored by a judge instead
+of a strict chunk_id match; (c) manual re-labelling of the misses.
+**Audit result (see decision 8).** There are no fully answering alternatives (0/18). Partially
+answering: 6/18. The honest baseline range is **0.695-0.797**. A full re-labelling is not
+needed, but both bounds have to be carried through the whole ablation.
 
-### Закрыты
-- Что делать после M2 -> A (агент), с вставкой из B. C и D отложены как №31, №32.
-- С чем сравнивать агента -> роутер как бейзлайн (решение №18).
-- Как мерить правильность ответа -> гибрид из трёх метрик (решение №19).
-- Prompt injection -> заложить атаку в корпус (решение №20).
+### 17. The hard set is small (59 questions)
+Conversational questions more often lose the distinguishing entity and get rejected. Either
+the requirement has to be relaxed, or we generate with a surplus and top up to 120+.
 
-### Открыта сейчас
-- Состав набора вопросов для агента: сколько каких типов, какие именно
-  двухисточниковые вопросы считаются настоящими.
+### 18. Refined diagnosis: retrieval lands in the neighbourhood, not on the figure
+**Evidence.** In 6 of the 18 misses on the hard set the output contains `OPS-XX-001` for the
+right state — the right region, but baseline deadlines instead of the exact figure from the
+rate table `POL-RATE-001`.
+**What this changes.** Previously the diagnosis read "on hard questions the document is not
+found". More precisely: an **adjacent** document is found. So the reranker's job is not so
+much to lift the right piece out of the depths as to **tell similar documents apart** — which
+is exactly what a cross-encoder does better than a bi-encoder.
 
-### 33. Отказ не работает ни в одной схеме
-Решения №17 и №21: `nq1` («сколько уникальных клиентов») проваливается и на голом
-SQL-инструменте при всех четырёх уровнях описания схемы, и в роутере. Ответ 99 441
-выглядит правдоподобно и означает не то, что спросили. none = 0.50.
-Проверить на агенте, потом лечить: инструкция в системном промпте, проверка постфактум,
-либо больше неотвечаемых вопросов в наборе.
+### 19. Numeric ranges in tables
+**Evidence.** The question "how much does it cost to send 2 kg" against a rate table that
+carries the range `1.0–3.0 kg`. The string "2" does not appear in the chunk at all.
+**Why this is hard.** Neither BM25 nor vector search understands that 2 falls inside the
+interval 1.0–3.0. Contextual retrieval does NOT fix this either: adding context does not turn
+"2" into "1.0–3.0".
+**Options.** (a) enrich the chunk at indexing time — expand the range into an explicit list of
+values; (b) move the table into structured form and answer such questions by computation
+rather than retrieval (that is, with a tool, not with RAG).
+**Observation.** Option (b) hints that some questions are not about retrieval at all. A rate
+table is data, not text, and it belongs in the SQL tool.
 
-### 34. Длина фрагмента в выдаче инструмента не измерена
-`SNIPPET_CHARS` подняли с 700 до 1800 после того, как обрезка сломала два ответа
-(решение №22). Значение выбрано «чтобы покрыть самый длинный чанк», а не измерено.
-Это ручка размена: длиннее фрагмент — полнее ответ, но больше токенов, дороже и
-медленнее. Ablation по 700 / 1200 / 1800 / без обрезки даст кривую.
+### 20. Failure classes after the label cleanup
+The current breakdown of hard-set failures:
+- **ranking** — the document is found but below rank 5. The reranker aims here
+- **numeric ranges** — see item 19
+- the "lost state" class is CLOSED: it turned out to be a golden-set defect, not a retrieval problem
 
-### 35. Латентность агента меряется по кешу и потому фиктивна
-В прогоне роутера видны времена вроде 1 мс — это попадание в кеш LLM. Для честной
-латентности нужен отдельный прогон с выключенным кешем на небольшой выборке
-(долг №12, теперь стал актуальным).
+### 21. The reranker amplifies the "figure -> neighbourhood" substitution
+**Evidence.** 4 hard-set questions where the gold chunk was in the top-3 before reranking and
+dropped out after. In all of them the top slot went to `OPS-XX-001` for the right state.
+**Why.** A cross-encoder rewards the topical coherence of the pair; a state handbook is
+coherent, a row of a rate grid is not.
+**Options.** (a) move the rates into the SQL tool (see 19) — removes the class entirely;
+(b) enrich table chunks with coherent text at indexing time so they have something to match on;
+(c) a separate threshold or boost by document type.
+**Observation.** `POL-RATE-001#18` and `#19` — adjacent chunks of the same table — are
+indistinguishable to the reranker. The same defect, only inside a document.
 
-### 36. Отказ определяется регуляркой, а должен полем
-Решение №25: шаблон уже дважды промахнулся на верных отказах («do not contain»,
-«is missing»). Нужен структурированный вывод: модель отдаёт `{answer, refused, sources}`,
-и отказ читается полем, а не угадывается по тексту. Затрагивает обе схемы одинаково,
-так что сравнение остаётся честным.
+### 22. Reranker latency has not been measured on production-like hardware
+p50 from 1.6 to 5.1 s — that is an Apple M4 GPU, float16, a 568M-parameter model.
+An honest figure needs one of: a smaller model (`bge-reranker-base`), ONNX/quantisation, or a
+hosted reranker API. The README currently carries a note that this is a relative rather than
+an absolute quantity.
 
-### 37. Один прогон - не измерение
-Решение №23: два прогона агента дали 0.88 и 1.00 на двухисточниковых. Разница в один
-вопрос (зацикливание `bq5`) равна 0.125 при n=8. Нужно 3+ прогона с усреднением и
-разбросом, иначе обсуждаемые различия тонут в шуме.
+### 23. Reranker latency depends on chunk length, not only on K
+A trial measurement on short chunks gave 2.1 s at window 50; the real run gave 5.1 s. The
+cause: attention is quadratic in the pair's length, and pieces of the rate table under 400
+tokens end up in the candidate list. The README needs percentiles, not a median.
 
-### 38. Гибрид роутер+агент как отдельная конфигурация
-Решение №23: на одноисточниковых вопросах агент не даёт ничего (обе схемы 1.00), но
-тратит в разы больше. Разумная прод-схема - роутер по умолчанию, агент по требованию.
-Триггер: `needed_second_hop`, который мы уже умеем детектировать.
-Мерить как третью строку таблицы: качество, шаги, токены.
+### 24. BM25 deferred: there is nothing to measure it with
+The pre-build check (decision 12): on the hard set 0 questions out of 51 contain an exact code,
+and the median word overlap with the gold chunk is 0.33. The hard-question generator paraphrased
+everything into natural speech and stripped the codes out. A real user types codes.
+**Item 25 first, then BM25.**
 
-### 39. Агент зацикливается на bq5
-В одном прогоне из двух: search_docs, search_docs, sql_query, search_docs x3, упёрся
-в лимит раундов, вернул пустой ответ. Защита сработала, но вопрос остался без ответа.
-Разобрать трассу: почему повторные поиски не признаются бесполезными.
+### 25. A third question type in the golden set: short and code-bearing
+How people actually search a help centre: `SEDEX-12 deadline`, `PAC-STD AC`, a tracking number.
+There are none of these in either set at the moment. Without them the hybrid is unmeasurable;
+with them, debt 17 (the hard set is small) closes as well.
 
-### 40. Защита от инъекции: измерена дыра, защиты пока нет
-Решение №26. Грубые атаки отбиты моделью сами по себе, тонкая (ложный факт без команд)
-прошла у обеих схем. Кандидаты, от дешёвого к дорогому:
-(а) инструкция в системном промпте: текст из инструментов - это ДАННЫЕ, не команды;
-    при противоречии между документами сообщить о противоречии, а не выбирать;
-(б) требовать в ответе ссылку на управляющий документ и проверять цепочку
-    `version` / `supersedes` / `effective_from`;
-(в) отдельный проход, сверяющий числа в ответе с несколькими источниками.
-**Мерить тем же набором из пяти атак, до и после.** Иначе это не защита, а надежда.
+### 26. CLOSED. Hierarchical retrieval: measured, no prize
+`lenient@20 = 0.980` is NOT the ceiling of a hierarchy: it is a chunk-level metric (a document
+counts if any of its chunks broke through), whereas a hierarchy searches one vector per
+document. For an 8,000-token rate table such a vector gets smeared out.
+**Done, decision 14.** Document-level retrieval: @1 0.667 against 0.843 for chunks; the full
+simulation of a hierarchy matched flat search to three decimals. Not building it.
+Only small-to-big stays open — it concerns generation and is not measurable by retrieval metrics.
 
-### 41. Обнаружение противоречий между документами
-Побочный вывод решения №26: агент выдал ответ, сославшись СРАЗУ на подложный и на
-настоящий документ, и противоречия не заметил. Это отдельный класс задач, полезный и
-без всякой атаки: в корпусе есть отменённая POL-RET-001 (10 дней) и действующая
-POL-RET-002 (14 дней), и путать их система тоже не должна.
+### 27. The reranker needs to be switchable by query type
+Decision 13: it helps recall@5 and hurts recall@1. So this is not "switch it on for good" but a
+per-query decision. A candidate rule: if the top-1 of dense retrieval is far ahead of the top-2,
+do not rerank. The threshold is calibrated on the golden set.
 
-### 42. Защита полномочий доверяет содержимому документа
-Решение №27 работает, потому что подложный документ не заявил себе версию. Атакующий,
-который впишет `version: 9.9` и `supersedes: POL-SLA-001`, защиту обойдёт.
-Настоящая граница доверия - ПРОИСХОЖДЕНИЕ документа, а не его текст: кто имеет право
-писать в корпус, подпись, канал поступления. Проверить это прямо: добавить шестую
-атаку с поддельными полями полномочий и померить.
+### 28. The SQL tool sees only the marts; raw tables are hidden
+A deliberate restriction (decision 16): the marts carry the decision about grain, and by joining
+raw tables the model would reproduce the fan-out. The price: questions about payments, sellers
+and geodata become unanswerable, because those tables are not in the marts. If such questions
+are needed, they should be added through a new mart, not by opening access to the raw tables.
 
-### 43. Роутер остаётся слабее агента и по устойчивости
-Решение №27: 3/5 против 5/5 у агента. Одна атака уходит в UNCLEAR. Отдельно разбирать
-не стали: роутер - бейзлайн, а не прод-схема. Но если брать гибрид (бэклог №38),
-устойчивость гибрида надо померить отдельно, а не наследовать от агента.
+### 29. The SQL timeout has only been checked from above
+`TIMEOUT_S = 20` and interruption through `con.interrupt()` are implemented, but on real data no
+query ever reached the limit (the heaviest, a 113k x 113k join, finished in 5.2 s). So the
+interrupt branch has never executed.
+**A test that actually triggers it is needed**, otherwise this is unverified code.
 
-### 44. bq5 нестабилен: один вопрос даёт весь разброс набора
-Решение №29. В одном прогоне из трёх агент выдал 6 449 вместо 7 073, потратив 6 шагов
-и упёршись в лимит раундов. Число не совпадает ни с одним подмножеством нужных
-категорий, значит запрос был третьим. Трассы теперь сохраняются - разобрать при
-следующем прогоне.
+### 30. The model does not refuse an unanswerable question
+Decision 17: `d01` fails at all four levels of schema description. The model confidently returns
+a number that looks plausible and means something other than what was asked.
+**Options.** (a) a separate refusal instruction in the system prompt, plus a measurement of
+whether it helps; (b) a post-hoc check comparing the meaning of the answer's columns with the
+question; (c) more unanswerable questions in the set — right now there is one, and the conclusion
+rests on a single example.
+**Start with (c):** one example is not a measurement.
 
-### 45. Агент не переиспользует уже полученные данные
-Решение №30: ищет поиском метаданные полномочий, которые уже напечатаны в выдаче
-предыдущего шага. Кандидаты: свести полученное в краткую сводку перед следующим
-раундом; явно называть в промпте, что метаданные уже приложены к каждому фрагменту.
-Мерить числом шагов и токенов, а не ощущением.
+### 31. A set of 34 questions is too small for weak effects
+The 95% interval at accuracy 0.941 and n=34 is 0.809-0.984. A difference of one question between
+levels is indistinguishable from noise. To see effects of the order of 5 percentage points you
+need 150+ questions, or a weaker model that has room to fall.
 
-### 46. Бюджет латентности неполон: нет вклада LLM
-Решение №32: локальные этапы измерены окончательно, вызовы модели - нет, кончилась
-квота. Дозамерить `LLM_CACHE=0 make latency` при появлении квоты; сам замер уже
-устойчив к сбоям и пишет трассы инкрементально.
+### 32. The measurement was made on one model
+The conclusion "describing the grain does not help" was obtained on `gemini-3.5-flash-lite`. On a
+weaker model grain errors might appear, and then the description would start working. A run on a
+second provider would turn a statement about this model into a statement about the task.
 
-### 47. Реранкер - единственная цель оптимизации латентности
-98% времени поиска. Кандидаты с ожидаемым эффектом:
-(а) меньшая модель (`bge-reranker-base`) - платим качеством;
-(б) ONNX или квантизация - платим временем интеграции;
-(в) окно 10 вместо 20 - кривая уже измерена в M2, качество падает мало;
-(г) реранжировать не всегда: пропускать, когда топ-1 плотного поиска оторван от топ-2.
-Мерить парой «recall@5 против p95», а не по отдельности.
+---
 
-### 48. ЗАКРЫТО. Экспортёр в Langfuse работает
-Решение №33. 25 трасс отправлены и проверены запросом к API сервера: структура и
-длительности сохранены. Ограничение инструмента (абсолютные метки = время экспорта)
-названо в решении.
+## Open forks
 
-### 49. Условный реранк реализован как замер, но не включён в инструмент
-Решение №35: порог 0.06 даёт то же качество на 12% быстрее. В `src/tools/search.py`
-правило НЕ добавлено: выигрыш скромный, а цена - третья ветка и параметр, требующий
-перекалибровки при смене модели. Включать имеет смысл, когда появится жёсткий бюджет
-латентности, и вместе с ним - тест, что порог всё ещё актуален.
+Accepted decisions live in `DECISIONS.md` and deferred tasks live here, but a fork that is under
+discussion right now used to be recorded nowhere. After a pause it had to be recalled from the
+conversation.
+**Rule:** a fork is written here the moment it is posed and moves to `DECISIONS.md` the moment it
+is chosen.
 
-### 50. Разрыв уверенности - не единственный возможный сигнал
-Распределение узкое (медиана 0.030, максимум 0.088), поэтому пропустить реранк удаётся
-редко. Кандидаты на замену: относительный разрыв вместо абсолютного, энтропия по топ-5,
-согласие плотного поиска с BM25. Мерить той же таблицей «доля реранжированных против
-двух recall».
+### Closed
+- What to do after M2 -> A (the agent), with an insertion from B. C and D deferred as 31 and 32.
+- What to compare the agent against -> a router as the baseline (decision 18).
+- How to measure answer correctness -> a hybrid of three metrics (decision 19).
+- Prompt injection -> plant the attack in the corpus (decision 20).
+
+### Open now
+- The composition of the agent question set: how many of each type, and which two-source questions
+  count as genuine.
+
+### 33. Refusal does not work in either scheme
+Decisions 17 and 21: `nq1` ("how many unique customers") fails both on the bare SQL tool at all
+four levels of schema description and in the router. The answer 99,441 looks plausible and means
+something other than what was asked. none = 0.50.
+Check it on the agent, then treat it: an instruction in the system prompt, a post-hoc check, or
+more unanswerable questions in the set.
+
+### 34. The snippet length in the tool output has not been measured
+`SNIPPET_CHARS` was raised from 700 to 1800 after truncation broke two answers (decision 22). The
+value was chosen "to cover the longest chunk", not measured. It is a trade-off knob: a longer
+snippet means a fuller answer but more tokens, more cost and more latency. An ablation over
+700 / 1200 / 1800 / no truncation would give the curve.
+
+### 35. Agent latency is measured through the cache and is therefore fictitious
+The router run shows timings of about 1 ms — those are LLM cache hits. An honest latency figure
+needs a separate run with the cache off on a small sample (debt 12, now become relevant).
+
+### 36. Refusal is detected by a regular expression and should be a field
+Decision 25: the pattern has already missed twice on correct refusals ("do not contain",
+"is missing"). Structured output is needed: the model returns `{answer, refused, sources}` and
+refusal is read from a field rather than guessed from text. It affects both schemes equally, so
+the comparison stays fair.
+
+### 37. One run is not a measurement
+Decision 23: two agent runs gave 0.88 and 1.00 on the two-source bucket. A difference of one
+question (`bq5` looping) equals 0.125 at n=8. Three or more runs with a mean and a spread are
+needed, otherwise the differences under discussion drown in noise.
+
+### 38. A router+agent hybrid as a separate configuration
+Decision 23: on single-source questions the agent gives nothing (both schemes 1.00) while
+spending several times more. The sensible production shape is a router by default and the agent
+on demand. The trigger is `needed_second_hop`, which we already detect.
+Measure it as a third row of the table: quality, steps, tokens.
+
+### 39. The agent loops on bq5
+In one run out of two: search_docs, search_docs, sql_query, search_docs x3, hit the round limit,
+returned an empty answer. The protection worked, but the question went unanswered.
+Examine the trace: why the repeated searches are not recognised as useless.
+
+### 40. Injection defence: the hole is measured, the defence is not built yet
+Decision 26. Crude attacks are repelled by the model on its own; the subtle one (a false fact with
+no commands) went through in both schemes. Candidates, from cheap to expensive:
+(a) an instruction in the system prompt: text from tools is DATA, not commands; on a contradiction
+    between documents report the contradiction rather than choosing;
+(b) require a reference to the governing document in the answer and check the
+    `version` / `supersedes` / `effective_from` chain;
+(c) a separate pass reconciling the numbers in the answer against several sources.
+**Measure with the same five attacks, before and after.** Otherwise it is hope, not a defence.
+
+### 41. Detecting contradictions between documents
+A side conclusion of decision 26: the agent produced an answer citing BOTH the forged and the real
+document at once, and did not notice the contradiction. This is a separate class of task, useful
+even without any attack: the corpus contains the superseded POL-RET-001 (10 days) and the current
+POL-RET-002 (14 days), and the system must not confuse those either.
+
+### 42. The authority defence trusts the contents of the document
+Decision 27 works because the forged document did not claim a version. An attacker who writes
+`version: 9.9` and `supersedes: POL-SLA-001` walks straight through it. The real trust boundary is
+the document's PROVENANCE, not its text: who may write into the corpus, the signature, the intake
+channel. Test this directly: add a sixth attack with forged authority fields and measure.
+
+### 43. The router remains weaker than the agent in robustness too
+Decision 27: 3/5 against the agent's 5/5. One attack lands in UNCLEAR. Not examined separately:
+the router is a baseline, not a production scheme. But if the hybrid (item 38) is adopted, the
+hybrid's robustness has to be measured on its own rather than inherited from the agent.
+
+### 44. bq5 is unstable: one question produces the entire spread of the set
+Decision 29. In one run out of three the agent returned 6,449 instead of 7,073, spending 6 steps
+and hitting the round limit. The number matches no subset of the required categories, so the query
+was a third thing. Traces are now saved — examine it on the next run.
+
+### 45. The agent does not reuse data it has already received
+Decision 30: it searches for the authority metadata that is already printed in the previous step's
+output. Candidates: condense what has been received into a short summary before the next round;
+state explicitly in the prompt that the metadata is already attached to every passage.
+Measure by step count and tokens, not by impression.
+
+### 46. The latency budget is incomplete: the LLM contribution is missing
+Decision 32: the local stages are measured conclusively, the model calls are not — the quota ran
+out. Top it up with `LLM_CACHE=0 make latency` when a quota is available; the benchmark is already
+failure-tolerant and writes traces incrementally.
+
+### 47. The reranker is the only target for latency optimisation
+98% of search time. Candidates with an expected effect:
+(a) a smaller model (`bge-reranker-base`) — paid for in quality;
+(b) ONNX or quantisation — paid for in integration time;
+(c) window 10 instead of 20 — the curve is already measured in M2, quality falls little;
+(d) do not always rerank: skip when the top-1 of dense retrieval is far ahead of the top-2.
+Measure as the pair "recall@5 against p95", not separately.
+
+### 48. CLOSED. The Langfuse exporter works
+Decision 33. 25 traces were sent and verified by querying the server's API: structure and durations
+preserved. The tool's limitation (absolute timestamps = export time) is stated in the decision.
+
+### 49. Conditional reranking is implemented as a measurement but not wired into the tool
+Decision 35: threshold 0.06 gives the same quality 12% faster. The rule is NOT added to
+`src/tools/search.py`: the gain is modest and the price is a third branch plus a parameter that
+needs recalibrating on a model change. Worth switching on once there is a hard latency budget, and
+together with a test that the threshold is still current.
+
+### 50. The confidence gap is not the only possible signal
+The distribution is narrow (median 0.030, maximum 0.088), so skipping the rerank is rarely
+possible. Replacement candidates: a relative gap instead of an absolute one, entropy over the
+top-5, agreement between dense retrieval and BM25. Measure with the same table: "share reranked
+against the two recalls".

@@ -1,4 +1,4 @@
-"""Типы и протокол провайдера LLM."""
+"""Types and the LLM provider protocol."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -13,13 +13,13 @@ class ToolCall:
     name: str
     arguments: dict[str, Any]
     extra: dict[str, Any] = field(default_factory=dict)
-    """Служебные поля провайдера, которые обязаны вернуться обратно.
+    """Provider-specific fields that must be sent back unchanged.
 
-    OpenAI-совместимый эндпоинт совместим по ФОРМЕ, но не по семантике.
-    Gemini 3 кладёт сюда `thought_signature` и требует его в следующем запросе,
-    иначе отвечает 400. Без сквозного проброса цикл агента невозможен в принципе,
-    а на одиночном вызове дефект не проявляется - поэтому он и всплыл только
-    на втором раунде.
+    An OpenAI-compatible endpoint is compatible in FORM but not in semantics.
+    Gemini 3 puts `thought_signature` here and requires it in the next request,
+    answering 400 otherwise. Without passing this through, an agent loop is
+    impossible in principle - and a single call never exposes the defect, which
+    is why it only surfaced on the second round.
     """
 
 
@@ -41,7 +41,7 @@ class LLMResponse:
 
 
 class LLMProvider(Protocol):
-    """Единый интерфейс. Менять провайдера = менять одну строку в .env."""
+    """One interface. Changing provider = changing one line in .env."""
 
     name: str
     model: str

@@ -1,56 +1,56 @@
 .PHONY: setup data corpus chunks index golden eval ablation doc-level \
 	sql-ablation router agent injection latency latency-local langfuse clean help
 
-help:           ## показать список команд
+help:           ## list the commands
 	@grep -E '^[a-z-]+:.*?##' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "};{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
-setup:          ## поставить зависимости
+setup:          ## install dependencies
 	uv sync --extra dev
 
-data:           ## скачать Olist и собрать DuckDB
+data:           ## download Olist and build the DuckDB database
 	uv run python -m src.ingest.download
 	uv run python -m src.ingest.build_db
 
-corpus:         ## сгенерировать корпус документов (373 шт., детерминированно)
+corpus:         ## generate the document corpus (deterministic)
 	uv run python -m src.ingest.build_docs
 
-chunks:         ## нарезать корпус на чанки
+chunks:         ## split the corpus into chunks
 	uv run python -m src.rag.chunking
 
-index:          ## посчитать эмбеддинги чанков
+index:          ## compute chunk embeddings
 	uv run python -m src.rag.index
 
-golden:         ## синтезировать golden set (требует ключа LLM)
+golden:         ## synthesise the golden set (needs an LLM key)
 	uv run python -m src.eval.golden
 
-eval:           ## метрики поиска на обоих golden set
+eval:           ## retrieval metrics on both golden sets
 	uv run python -m src.eval.retrieval
 
-ablation:       ## ablation по реранкеру: качество против латентности
+ablation:       ## reranker ablation: quality against latency
 	uv run python -m src.eval.ablation_rerank
 
-doc-level:      ## замер иерархического поиска (решение №14)
+doc-level:      ## hierarchical retrieval measurement (decision 14)
 	uv run python -m src.eval.ablation_doc_level
 
-sql-ablation:   ## text-to-SQL на четырёх уровнях описания схемы
+sql-ablation:   ## text-to-SQL across four schema description levels
 	uv run python -m src.eval.ablation_sql
 
-router:         ## бейзлайн агента: один раунд вызовов инструментов
+router:         ## agent baseline: one round of tool calls
 	uv run python -m src.eval.ablation_agent router
 
-agent:          ## цикл агента со сцеплением вызовов
+agent:          ## the agent loop, with chained calls
 	uv run python -m src.eval.ablation_agent agent
 
-injection:      ## пять заложенных атак; AGENT_DEFENSE=0 отключает защиту
+injection:      ## five planted attacks; AGENT_DEFENSE=0 turns the defence off
 	uv run python -m src.eval.injection
 
-latency:        ## бюджет латентности по этапам (только без кеша)
+latency:        ## per-stage latency budget (cache must be off)
 	LLM_CACHE=0 uv run python -m src.eval.latency
 
-latency-local:  ## только локальные этапы: без квоты провайдера, пишет трассы
+latency-local:  ## local stages only: no provider quota needed, writes traces
 	LAT_LOCAL_ONLY=1 uv run python -m src.eval.latency
 
-langfuse:       ## отправить трассы в Langfuse; DRY_RUN=1 показать без отправки
+langfuse:       ## send traces to Langfuse; DRY_RUN=1 shows them without sending
 	uv run python -m src.obs.langfuse_export
 
 clean:

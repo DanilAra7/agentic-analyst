@@ -1,7 +1,7 @@
-"""Плотный поиск по эмбеддингам.
+"""Dense retrieval over embeddings.
 
-Точный перебор: эмбеддинги нормированы, поэтому косинус = скалярное
-произведение, а поиск по всей базе = одно матричное умножение.
+An exact scan: the embeddings are normalised, so cosine = dot product and a
+search over the whole index is a single matrix multiplication.
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ class DenseRetriever:
         q = self.model.encode([query], normalize_embeddings=True,
                               convert_to_numpy=True).astype(np.float32)
         scores = (self.vectors @ q.T).ravel()
-        # argpartition вместо полной сортировки: нам нужен топ-k, а не порядок всех
+        # argpartition instead of a full sort: we need the top-k, not the order of all
         top = np.argpartition(-scores, min(k, len(scores) - 1))[:k]
         top = top[np.argsort(-scores[top])]
         out = []
@@ -47,7 +47,7 @@ class DenseRetriever:
         return out
 
     def search_batch(self, queries: list[str], k: int = 20) -> list[list[str]]:
-        """Батчем, для eval-прогонов: возвращает только id."""
+        """Batched, for eval runs: returns ids only."""
         q = self.model.encode(queries, normalize_embeddings=True,
                               convert_to_numpy=True, batch_size=32).astype(np.float32)
         scores = self.vectors @ q.T          # (n_chunks, n_queries)

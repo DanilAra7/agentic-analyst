@@ -1,14 +1,14 @@
-"""Метрики качества поиска.
+"""Retrieval quality metrics.
 
-Считаются из эмбеддингов и эталонных меток — БЕЗ единого вызова LLM.
-Поэтому вся ablation по ретриву бесплатна и может гоняться сколько угодно.
+Computed from embeddings and gold labels - WITHOUT a single LLM call.
+That makes the whole retrieval ablation free and runnable as often as needed.
 
-Два уровня строгости:
-  strict  — попал ли ровно тот чанк, из которого сгенерирован вопрос
-  lenient — попал ли любой чанк того же документа
+Two levels of strictness:
+  strict  - did exactly the chunk the question was generated from appear
+  lenient - did any chunk of the same document appear
 
-Разрыв между ними показывает, теряем ли мы на нарезке: если lenient сильно
-выше strict, документ находится, но выбирается не тот его кусок.
+The gap between them shows whether we are losing on chunking: if lenient is much
+higher than strict, the document is found but the wrong piece of it is picked.
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def load_golden(hard: bool = False) -> list[dict]:
 
 
 def score(ranked_ids: list[list[str]], golden: list[dict]) -> dict:
-    """ranked_ids[i] — упорядоченный список chunk_id для golden[i]."""
+    """ranked_ids[i] - the ordered list of chunk_ids for golden[i]."""
     strict = {k: 0 for k in KS}
     lenient = {k: 0 for k in KS}
     rr_strict = 0.0
@@ -64,12 +64,12 @@ def score(ranked_ids: list[list[str]], golden: list[dict]) -> dict:
 
 
 def report(res: dict, title: str) -> None:
-    print(f"\n=== {title}   (вопросов: {res['n']})")
+    print(f"\n=== {title}   (questions: {res['n']})")
     print(f"{'':10}" + "".join(f"@{k:<7}" for k in KS))
     print(f"{'strict':10}" + "".join(f"{res['recall_strict'][k]:<8.3f}" for k in KS))
     print(f"{'lenient':10}" + "".join(f"{res['recall_lenient'][k]:<8.3f}" for k in KS))
     print(f"\nMRR (strict): {res['mrr']:.3f}")
-    print("\nrecall@5 по семействам:")
+    print("\nrecall@5 by family:")
     for f, v in res["by_family"].items():
         print(f"  {f:<6} n={res['family_n'][f]:<4} {v:.3f}")
 
@@ -79,8 +79,8 @@ def main() -> None:
 
     r = get_retriever()
     results = {}
-    for hard, title in ((False, "ЛЁГКИЙ (лексика документа)"),
-                        (True,  "ТРУДНЫЙ (лексика пользователя)")):
+    for hard, title in ((False, "EASY (document wording)"),
+                        (True,  "HARD (user wording)")):
         golden = load_golden(hard)
         ranked = r.search_batch([g["question"] for g in golden], k=max(KS))
         results[hard] = score(ranked, golden)
@@ -88,24 +88,24 @@ def main() -> None:
 
     e, h = results[False], results[True]
     print("\n" + "=" * 62)
-    print("СРАВНЕНИЕ: цена разрыва лексики")
-    print(f"{'':12}{'лёгкий':>10}{'трудный':>10}{'дельта':>10}")
+    print("COMPARISON: the price of the vocabulary gap")
+    print(f"{'':12}{'easy':>10}{'hard':>10}{'delta':>10}")
     for k in KS:
         a, b = e["recall_strict"][k], h["recall_strict"][k]
         print(f"  recall@{k:<4}{a:>10.3f}{b:>10.3f}{b - a:>+10.3f}")
     print(f"  {'MRR':<10}{e['mrr']:>10.3f}{h['mrr']:>10.3f}{h['mrr'] - e['mrr']:>+10.3f}")
     print(f"\n{'':12}{'lenient@5':>10}")
-    print(f"  {'лёгкий':<10}{e['recall_lenient'][5]:>10.3f}")
-    print(f"  {'трудный':<10}{h['recall_lenient'][5]:>10.3f}")
+    print(f"  {'easy':<10}{e['recall_lenient'][5]:>10.3f}")
+    print(f"  {'hard':<10}{h['recall_lenient'][5]:>10.3f}")
 
     (EVALS / "baseline_dense.json").write_text(json.dumps(
         {"easy": {k: v for k, v in e.items() if k != "misses"},
          "hard": {k: v for k, v in h.items() if k != "misses"}},
         ensure_ascii=False, indent=2), encoding="utf-8")
 
-    print(f"\nпровалов на трудном наборе: {len(h['misses'])} из {h['n']}")
+    print(f"\nmisses on the hard set: {len(h['misses'])} of {h['n']}")
     for m in h["misses"][:10]:
-        pos = f"#{m['rank']}" if m["rank"] else "нет"
+        pos = f"#{m['rank']}" if m["rank"] else "none"
         print(f"  [{m['family']:<3} {pos:>4}] {m['question'][:86]}")
 
 
